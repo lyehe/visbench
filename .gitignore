@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# uv / venvs
+.venv/
+.venv_*/
+.uv_cache/
+
+# Runtime data + results (anchored to repo root so `visbench/datasets/`
+# package code is NOT ignored).
+/datasets/
+/results/
+/runs/
+*.npz
+*.pth
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

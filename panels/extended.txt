@@ -1,0 +1,15 @@
+# Extended panel — adds rotation sweep + cross-modal MINIMA + pose stressors.
+hpatches
+hpatches_rot45
+hpatches_rot90
+hpatches_rot180
+oxford_affine
+evd
+synthetic_jpeg_q30
+synthetic_blur_7
+synthetic_low_light
+synthetic_motion_blur_15
+megadepth1500
+tum_rgbd
+blendedmvs
+kitti_odometry

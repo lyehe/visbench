@@ -1,0 +1,9 @@
+# Curated SOTA via vismatch passthrough. Edit to taste; consult
+# `python -m visbench list methods` for available names.
+vismatch:superpoint-lightglue
+vismatch:disk-lightglue
+vismatch:aliked-lightglue
+vismatch:sift-lightglue
+vismatch:loftr
+vismatch:roma_outdoor
+vismatch:dedode

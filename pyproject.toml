@@ -1,0 +1,78 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "visbench"
+version = "0.1.0"
+description = "Benchmark harness for visual feature matching: standardized datasets, methods, and reporting."
+readme = "README.md"
+requires-python = ">= 3.10"
+license = { text = "BSD-3-Clause" }
+authors = [
+  { name = "visbench contributors" },
+]
+keywords = ["image matching", "benchmark", "feature matching", "homography", "pose estimation"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: BSD License",
+]
+
+dependencies = [
+  "vismatch",
+  "torch>=2.0",
+  "torchvision>=0.15",
+  "opencv-python>=4.5.4",
+  "kornia>=0.7.3",
+  "numpy",
+  "scipy",
+  "scikit-image",
+  "scikit-learn",
+  "pillow",
+  "huggingface_hub>=0.22.0",
+  "hf_transfer>=0.1.5",
+  "datasets",
+  "gdown>=5.1.0",
+  "py3_wget>=0.3",
+  "py7zr",
+  "tqdm",
+  "loguru",
+  "h5py",
+  "omegaconf",
+  "poselib",
+  "tabulate",
+  "requests",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff", "mypy"]
+
+[project.scripts]
+visbench = "visbench.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/yourorg/visbench"
+
+[tool.hatch.build.targets.wheel]
+packages = ["visbench"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"visbench/reference_scores.json" = "visbench/reference_scores.json"
+
+[tool.uv.sources]
+vismatch    = { path = "third_party/vismatch", editable = true }
+torch       = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.ruff]
+line-length = 120
+exclude = ["third_party"]
+
+[tool.ruff.lint]
+ignore = ["E402", "E501"]

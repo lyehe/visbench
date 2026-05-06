@@ -1,0 +1,6 @@
+# Classical baselines.
+sift
+rootsift
+orb
+akaze
+brisk

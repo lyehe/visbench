@@ -1,0 +1,46 @@
+{
+  "_doc": "Published reference scores from the literature, used by `visbench report` to print SOTA next to user runs. Schema: <dataset> -> <method> -> {metrics, _source, _ref: true}. Update sources before adding rows.",
+  "megadepth1500": {
+    "sift-nn":               {"auc_5": 0.227, "auc_10": 0.388, "auc_20": 0.554, "_source": "Sun et al., LoFTR Table 4"},
+    "rootsift":              {"auc_5": 0.337, "auc_10": 0.499, "auc_20": 0.640, "_source": "featurexx in-house, RoMa protocol"},
+    "superpoint+superglue":  {"auc_5": 0.420, "auc_10": 0.611, "auc_20": 0.762, "_source": "Sun et al., LoFTR Table 4"},
+    "superpoint+lightglue":  {"auc_5": 0.495, "auc_10": 0.665, "auc_20": 0.798, "_source": "Lindenberger et al., LightGlue, ICCV 2023"},
+    "loftr":                 {"auc_5": 0.524, "auc_10": 0.690, "auc_20": 0.811, "_source": "Sun et al., LoFTR Table 4"},
+    "aspanformer":           {"auc_5": 0.554, "auc_10": 0.717, "auc_20": 0.834, "_source": "Chen et al., ASpanFormer Table 1"},
+    "eloftr":                {"auc_5": 0.566, "auc_10": 0.726, "auc_20": 0.840, "_source": "Wang et al., EfficientLoFTR Table 2"},
+    "roma":                  {"auc_5": 0.589, "auc_10": 0.731, "auc_20": 0.840, "_source": "Edstedt et al., RoMa, CVPR 2024"},
+    "romav2":                {"auc_5": 0.602, "auc_10": 0.741, "auc_20": 0.846, "_source": "Edstedt et al., RoMa-V2, 2024"}
+  },
+  "hpatches": {
+    "sift-nn":               {"all_auc_5": 0.510, "all_auc_10": 0.674, "all_mma_3": 0.520, "_source": "Sun et al., LoFTR Table 5"},
+    "rootsift":              {"all_auc_5": 0.65,  "all_auc_10": 0.78,  "all_mma_3": 0.60,  "_source": "featurexx in-house"},
+    "d2-net":                {"all_auc_5": 0.387, "all_auc_10": 0.534, "all_mma_3": 0.486, "_source": "Sun et al., LoFTR Table 5"},
+    "superpoint+superglue":  {"all_auc_5": 0.558, "all_auc_10": 0.712, "all_mma_3": 0.642, "_source": "LightGlue paper"},
+    "loftr":                 {"all_auc_5": 0.658, "all_auc_10": 0.781, "all_mma_3": 0.722, "_source": "Sun et al., LoFTR Table 5"},
+    "superpoint+lightglue":  {"all_auc_5": 0.677, "all_auc_10": 0.786, "all_mma_3": 0.728, "_source": "Lindenberger et al., LightGlue Table 1"},
+    "roma":                  {"all_auc_5": 0.722, "all_auc_10": 0.825,                     "_source": "Edstedt et al., RoMa, CVPR 2024"}
+  },
+  "wxbs_hf": {
+    "sift":                  {"all_mAA_10": 0.05, "_source": "LoMa benchmark"},
+    "loftr":                 {"all_mAA_10": 0.32, "_source": "LoMa Table 2"},
+    "roma":                  {"all_mAA_10": 0.59, "_source": "LoMa Table 2"},
+    "loma":                  {"all_mAA_10": 0.62, "_source": "LoMa, BMVC 2024"}
+  },
+  "evd": {
+    "loftr":                 {"all_auc_10": 0.69, "_source": "LoMa benchmarks"},
+    "roma":                  {"all_auc_10": 0.83, "_source": "Edstedt et al., RoMa, CVPR 2024"}
+  },
+  "dtu_mvs": {
+    "superpoint+lightglue":  {"auc_5": 0.34, "auc_10": 0.52, "auc_20": 0.69, "_source": "MASt3R Table 6"},
+    "loftr":                 {"auc_5": 0.40, "auc_10": 0.59, "auc_20": 0.74, "_source": "MASt3R Table 6"},
+    "roma":                  {"auc_5": 0.51, "auc_10": 0.69, "auc_20": 0.81, "_source": "MASt3R Table 6"},
+    "dust3r":                {"auc_5": 0.55, "auc_10": 0.72, "auc_20": 0.83, "_source": "Wang et al., DUSt3R, CVPR 2024"},
+    "mast3r":                {"auc_5": 0.65, "auc_10": 0.79, "auc_20": 0.87, "_source": "Wang et al., MASt3R, ECCV 2024"}
+  },
+  "zeb_all": {
+    "superpoint+lightglue":  {"auc_5": 0.30, "_source": "RoMa Table 1"},
+    "loftr":                 {"auc_5": 0.42, "_source": "RoMa Table 1"},
+    "roma":                  {"auc_5": 0.51, "_source": "Edstedt et al., RoMa Table 1"},
+    "romav2":                {"auc_5": 0.55, "_source": "Edstedt et al., RoMa-V2, 2024"}
+  }
+}

@@ -1,0 +1,7 @@
+# Core panel — small, fast, no heavy DUA-gated downloads.
+hpatches
+hpatches_rot90
+oxford_affine
+evd
+sacre_coeur
+synthetic_jpeg_q30
