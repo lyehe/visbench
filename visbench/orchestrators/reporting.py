@@ -27,15 +27,39 @@ def _load_results(results_dir: Path):
     return out
 
 
-def _load_references() -> dict:
-    """Return {dataset: {method: metrics_dict}} from packaged reference_scores.json."""
+def _load_references() -> tuple[dict, dict, dict]:
+    """Return (refs, aliases, no_published) from packaged reference_scores.json.
+
+    refs           : {dataset: {method: metrics_dict}}
+    aliases        : {dataset: parent_dataset}      — parent's refs are inherited
+    no_published   : {dataset: explanation_string}  — show "(no published reference)" row
+    """
     if not _REFERENCE_PATH.exists():
-        return {}
+        return {}, {}, {}
     try:
         raw = json.loads(_REFERENCE_PATH.read_text())
     except Exception:
-        return {}
-    return {k: v for k, v in raw.items() if not k.startswith("_")}
+        return {}, {}, {}
+    aliases = raw.get("_aliases", {}) or {}
+    no_pub = raw.get("_no_published_reference", {}) or {}
+    refs = {k: v for k, v in raw.items() if not k.startswith("_")}
+    return refs, aliases, no_pub
+
+
+def _resolve_ref(ds: str, refs: dict, aliases: dict, no_published: dict
+                 ) -> tuple[dict | None, str | None]:
+    """Returns (method_metrics_map, status_note). Follows alias chains."""
+    seen = set()
+    cur = ds
+    while cur in aliases and cur not in seen:
+        seen.add(cur)
+        cur = aliases[cur]
+    if cur in refs:
+        note = f"inherits from `{cur}`" if cur != ds else None
+        return refs[cur], note
+    if ds in no_published:
+        return None, no_published[ds]
+    return None, None
 
 
 def _hp(m, key="all_auc_5"):
@@ -53,7 +77,7 @@ def report(results_dir: Path, top_k: int = 25,
     hp_panel = hp_panel or HP_PANEL_DEFAULT
     pose_panel = pose_panel or POSE_PANEL_DEFAULT
     rows = _load_results(results_dir)
-    refs = _load_references() if show_reference else {}
+    refs, aliases, no_published = (_load_references() if show_reference else ({}, {}, {}))
 
     print(f"\n# VISBENCH REPORT  ({results_dir})\n")
     print(f"Methods with at least one result: {len(rows)}")
@@ -85,19 +109,20 @@ def report(results_dir: Path, top_k: int = 25,
         candidates = candidates[:top_k]
 
         # Append reference rows AFTER ranking so they don't compete in the top-k cut.
-        ref_ds = refs.get(ds, {})
-        if is_hp:
-            for ref_name, m in ref_ds.items():
-                candidates.append(("ref", ref_name,
-                                   _hp(m, "all_auc_5"),
-                                   _hp(m, "all_auc_10"),
-                                   _hp(m, "all_mma_3")))
-        else:
-            for ref_name, m in ref_ds.items():
-                candidates.append(("ref", ref_name,
-                                   _pose(m, "auc_5"),
-                                   _pose(m, "auc_10"),
-                                   _pose(m, "auc_20")))
+        ref_ds, ref_note = _resolve_ref(ds, refs, aliases, no_published)
+        if ref_ds:
+            if is_hp:
+                for ref_name, m in ref_ds.items():
+                    candidates.append(("ref", ref_name,
+                                       _hp(m, "all_auc_5"),
+                                       _hp(m, "all_auc_10"),
+                                       _hp(m, "all_mma_3")))
+            else:
+                for ref_name, m in ref_ds.items():
+                    candidates.append(("ref", ref_name,
+                                       _pose(m, "auc_5"),
+                                       _pose(m, "auc_10"),
+                                       _pose(m, "auc_20")))
 
         if not candidates:
             print(f"### {ds}: (no results)\n")
@@ -111,6 +136,11 @@ def report(results_dir: Path, top_k: int = 25,
         for kind, name, a, b, c in candidates:
             label = (f"ref: {name}" if kind == "ref" else name)[:43]
             print(f"  {label:<45} {a:.3f}   {b:.3f}   {c:.3f}")
+        # Show the alias-or-no-published note as a single line under the table.
+        if show_reference and not ref_ds and ref_note:
+            print(f"  ref: (no published reference) -- {ref_note[:80]}")
+        elif show_reference and ref_note:
+            print(f"  ref: ({ref_note})")
         print()
 
     print("\n## Combined ranking (mean across panel)\n")

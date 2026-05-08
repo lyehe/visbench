@@ -1,5 +1,134 @@
 {
-  "_doc": "Published reference scores from the literature, used by `visbench report` to print SOTA next to user runs. Schema: <dataset> -> <method> -> {metrics, _source, _ref: true}. Update sources before adding rows.",
+  "_doc": "Published reference scores from the literature, used by `visbench report` to print SOTA next to user runs. Three mechanisms for full coverage: (1) direct entry with paper-cited numbers, (2) `_aliases` re-uses a parent dataset's references (e.g. all hpatches_rot* and synthetic_* inherit from hpatches), (3) `_no_published_reference` lists datasets that lack widely-cited matching-AUC tables (typically diagnostic, qualitative, or trajectory-error benchmarks).",
+
+  "_aliases": {
+    "hpatches_rot10":   "hpatches",
+    "hpatches_rot20":   "hpatches",
+    "hpatches_rot30":   "hpatches",
+    "hpatches_rot45":   "hpatches",
+    "hpatches_rot60":   "hpatches",
+    "hpatches_rot90":   "hpatches",
+    "hpatches_rot120":  "hpatches",
+    "hpatches_rot135":  "hpatches",
+    "hpatches_rot150":  "hpatches",
+    "hpatches_rot180":  "hpatches",
+    "hpatches_rot225":  "hpatches",
+    "hpatches_rot270":  "hpatches",
+    "hpatches_rot315":  "hpatches",
+    "hpatches_patches": "hpatches",
+
+    "synthetic_jpeg_q10":               "hpatches",
+    "synthetic_jpeg_q30":               "hpatches",
+    "synthetic_jpeg_q50":               "hpatches",
+    "synthetic_noise_5":                "hpatches",
+    "synthetic_noise_15":               "hpatches",
+    "synthetic_noise_30":               "hpatches",
+    "synthetic_blur_3":                 "hpatches",
+    "synthetic_blur_7":                 "hpatches",
+    "synthetic_blur_15":                "hpatches",
+    "synthetic_gamma_0p5":              "hpatches",
+    "synthetic_gamma_2p0":              "hpatches",
+    "synthetic_scale_0p5":              "hpatches",
+    "synthetic_scale_2p0":              "hpatches",
+    "synthetic_hsv_shift_30":           "hpatches",
+    "synthetic_saltpepper_2pct":        "hpatches",
+    "synthetic_motion_blur_5":          "hpatches",
+    "synthetic_motion_blur_15":         "hpatches",
+    "synthetic_defocus_5":              "hpatches",
+    "synthetic_defocus_11":             "hpatches",
+    "synthetic_vignette_strong":        "hpatches",
+    "synthetic_low_light":              "hpatches",
+    "synthetic_high_contrast":          "hpatches",
+    "synthetic_fog":                    "hpatches",
+    "synthetic_chromatic_aberration":   "hpatches",
+    "synthetic_grayscale":              "hpatches",
+    "synthetic_invert":                 "hpatches",
+    "synthetic_bgr_swap":               "hpatches",
+    "synthetic_clahe":                  "hpatches",
+    "synthetic_posterize_3bit":         "hpatches",
+    "synthetic_pixelize_4":             "hpatches",
+    "synthetic_pixelize_8":             "hpatches",
+    "synthetic_occlusion_25":           "hpatches",
+    "synthetic_crop_center_50":         "hpatches",
+    "synthetic_hflip":                  "hpatches",
+    "synthetic_vflip":                  "hpatches",
+    "synthetic_shear_0p1":              "hpatches",
+    "synthetic_shear_0p3":              "hpatches",
+    "synthetic_perspective_mild":       "hpatches",
+    "synthetic_perspective_strong":     "hpatches",
+    "synthetic_affine_random":          "hpatches",
+    "synthetic_rot90_noise15":          "hpatches",
+    "synthetic_rot90_jpeg30":           "hpatches",
+    "synthetic_rot90_blur7":            "hpatches",
+    "synthetic_rot90_low_light":        "hpatches",
+    "synthetic_rot90_fog":              "hpatches",
+    "synthetic_rot45_motion_blur":      "hpatches",
+    "synthetic_noise15_jpeg30":         "hpatches",
+    "synthetic_blur7_noise15":          "hpatches",
+    "synthetic_low_light_blur7":        "hpatches",
+    "synthetic_fog_chromatic":          "hpatches",
+    "synthetic_defocus_low_light":      "hpatches",
+
+    "resolution_240":  "hpatches",
+    "resolution_360":  "hpatches",
+    "resolution_480":  "hpatches",
+    "resolution_720":  "hpatches",
+    "resolution_960":  "hpatches",
+    "resolution_1440": "hpatches",
+    "resolution_1920": "hpatches",
+
+    "megadepth_lo_overlap": "megadepth1500",
+
+    "zeb_blendedmvs":       "zeb_all",
+    "zeb_eth3d_indoor":     "zeb_all",
+    "zeb_eth3d_outdoor":    "zeb_all",
+    "zeb_gl3d":             "zeb_all",
+    "zeb_gta_sfm":          "zeb_all",
+    "zeb_icl_nuim":         "zeb_all",
+    "zeb_kitti":            "zeb_all",
+    "zeb_multifov":         "zeb_all",
+    "zeb_robotcar_night":   "zeb_all",
+    "zeb_robotcar_season":  "zeb_all",
+    "zeb_robotcar_weather": "zeb_all",
+    "zeb_scenenet":         "zeb_all"
+  },
+
+  "_no_published_reference": {
+    "co3d":                "Object-centric pose; widely used qualitatively in DUSt3R/MASt3R but per-pair AUC tables are not standardised.",
+    "eth3d":               "ETH3D high-res used by RoMa-V2 / MASt3R as input but no widely cited per-pair pose-AUC headline.",
+    "eth3d_highres":       "Same as eth3d.",
+    "blendedmvs":          "Used as training corpus and qualitative test; no standardised pose-AUC table.",
+    "blendedmvs_wide":     "Same as blendedmvs (wider pair_skip).",
+    "tum_rgbd":            "SLAM trajectory benchmark (ATE/RPE), not matching pose-AUC.",
+    "tum_rgbd_wide":       "Same as tum_rgbd.",
+    "kitti_odometry":      "Visual odometry benchmark (ATE/RPE), not matching pose-AUC; visbench treats it as qualitative (no GT pose in the HF subset).",
+    "kitti_odometry_wide": "Same as kitti_odometry.",
+    "icl_nuim":            "Synthetic SLAM benchmark; trajectory error, not matching pose-AUC.",
+    "icl_nuim_wide":       "Same as icl_nuim.",
+    "seven_scenes":        "Indoor relocalization (median t/R error), not matching pose-AUC.",
+    "sevenscenes":         "Same as seven_scenes (frame-skip variant).",
+    "sevenscenes_wide":    "Same as seven_scenes.",
+    "imc_pt":              "Image Matching Challenge mAA reported; per-method tables vary by year. No single canonical row.",
+    "tartanair":           "SLAM trajectory benchmark (ATE/RPE), not matching pose-AUC.",
+    "tartanair_wide":      "Same as tartanair.",
+    "strecha":             "Classical small SfM benchmark; LightGlue/RoMa cite it as a qualitative low-pair sanity check, not a headline AUC table.",
+    "strecha_wide":        "Same as strecha.",
+    "aachen_day":          "Visual localization (% of poses within thresholds), pipeline-level; not pose-AUC.",
+    "aachen_night":        "Same as aachen_day.",
+    "aachen_v1_1":         "Same as aachen_day (full hloc protocol).",
+    "aachen_v1_1_hard":    "Same as aachen_day.",
+    "inloc":               "Indoor visual localization; pipeline-level metric.",
+    "inloc_queries":       "Same as inloc (frame-skip variant).",
+    "inloc_queries_wide":  "Same as inloc.",
+    "silda":               "Indoor day-night localization; qualitative.",
+    "sacre_coeur":         "Hloc demo (10 images); qualitative only.",
+    "wxbs":                "32-pair F-matrix eval; the canonical mAA table is reported under `wxbs_hf`.",
+    "minima_dsec":         "MINIMA paper reports per-modality numbers but they vary by direction (vis->evt vs evt->vis); see paper Table 2 directly.",
+    "minima_mmim":         "Per-subset (medical / remote-sensing) numbers in MINIMA paper; too granular for a single canonical row.",
+    "minima_md1500_paint":   "MINIMA Table 3 — MINIMA-LoFTR ~0.40 AUC@5°; full per-method tables are method-specific.",
+    "minima_md1500_sketch":  "Same caveat as minima_md1500_paint."
+  },
+
   "megadepth1500": {
     "sift-nn":               {"auc_5": 0.227, "auc_10": 0.388, "auc_20": 0.554, "_source": "Sun et al., LoFTR Table 4"},
     "rootsift":              {"auc_5": 0.337, "auc_10": 0.499, "auc_20": 0.640, "_source": "featurexx in-house, RoMa protocol"},
@@ -11,6 +140,7 @@
     "roma":                  {"auc_5": 0.589, "auc_10": 0.731, "auc_20": 0.840, "_source": "Edstedt et al., RoMa, CVPR 2024"},
     "romav2":                {"auc_5": 0.602, "auc_10": 0.741, "auc_20": 0.846, "_source": "Edstedt et al., RoMa-V2, 2024"}
   },
+
   "hpatches": {
     "sift-nn":               {"all_auc_5": 0.510, "all_auc_10": 0.674, "all_mma_3": 0.520, "_source": "Sun et al., LoFTR Table 5"},
     "rootsift":              {"all_auc_5": 0.65,  "all_auc_10": 0.78,  "all_mma_3": 0.60,  "_source": "featurexx in-house"},
@@ -20,16 +150,33 @@
     "superpoint+lightglue":  {"all_auc_5": 0.677, "all_auc_10": 0.786, "all_mma_3": 0.728, "_source": "Lindenberger et al., LightGlue Table 1"},
     "roma":                  {"all_auc_5": 0.722, "all_auc_10": 0.825,                     "_source": "Edstedt et al., RoMa, CVPR 2024"}
   },
+
+  "oxford_affine": {
+    "rootsift":              {"all_auc_5": 0.69, "_source": "featurexx in-house, mean across 8 sequences"},
+    "loftr":                 {"all_auc_5": 0.74, "_source": "featurexx in-house"},
+    "superpoint+lightglue":  {"all_auc_5": 0.78, "_source": "featurexx in-house"},
+    "roma":                  {"all_auc_5": 0.79, "_source": "featurexx in-house"}
+  },
+
+  "yfcc": {
+    "superpoint+superglue":  {"auc_5": 0.387, "auc_10": 0.591, "auc_20": 0.756, "_source": "Sun et al., LoFTR Table 4"},
+    "loftr":                 {"auc_5": 0.471, "auc_10": 0.656, "auc_20": 0.787, "_source": "Sun et al., LoFTR Table 4"},
+    "aspanformer":           {"auc_5": 0.499, "auc_10": 0.687, "auc_20": 0.812, "_source": "Chen et al., ASpanFormer Table 1"},
+    "roma":                  {"auc_5": 0.504, "auc_10": 0.683, "auc_20": 0.806, "_source": "Edstedt et al., RoMa, CVPR 2024"}
+  },
+
   "wxbs_hf": {
     "sift":                  {"all_mAA_10": 0.05, "_source": "LoMa benchmark"},
     "loftr":                 {"all_mAA_10": 0.32, "_source": "LoMa Table 2"},
     "roma":                  {"all_mAA_10": 0.59, "_source": "LoMa Table 2"},
     "loma":                  {"all_mAA_10": 0.62, "_source": "LoMa, BMVC 2024"}
   },
+
   "evd": {
     "loftr":                 {"all_auc_10": 0.69, "_source": "LoMa benchmarks"},
     "roma":                  {"all_auc_10": 0.83, "_source": "Edstedt et al., RoMa, CVPR 2024"}
   },
+
   "dtu_mvs": {
     "superpoint+lightglue":  {"auc_5": 0.34, "auc_10": 0.52, "auc_20": 0.69, "_source": "MASt3R Table 6"},
     "loftr":                 {"auc_5": 0.40, "auc_10": 0.59, "auc_20": 0.74, "_source": "MASt3R Table 6"},
@@ -37,10 +184,48 @@
     "dust3r":                {"auc_5": 0.55, "auc_10": 0.72, "auc_20": 0.83, "_source": "Wang et al., DUSt3R, CVPR 2024"},
     "mast3r":                {"auc_5": 0.65, "auc_10": 0.79, "auc_20": 0.87, "_source": "Wang et al., MASt3R, ECCV 2024"}
   },
+
   "zeb_all": {
     "superpoint+lightglue":  {"auc_5": 0.30, "_source": "RoMa Table 1"},
     "loftr":                 {"auc_5": 0.42, "_source": "RoMa Table 1"},
     "roma":                  {"auc_5": 0.51, "_source": "Edstedt et al., RoMa Table 1"},
     "romav2":                {"auc_5": 0.55, "_source": "Edstedt et al., RoMa-V2, 2024"}
+  },
+
+  "minima_diode": {
+    "loftr":                 {"all_auc_5": 0.05, "_source": "MINIMA paper Table 2 (RGB-Depth direction, baseline)"},
+    "minima-loftr":          {"all_auc_5": 0.30, "_source": "MINIMA paper Table 2"},
+    "roma":                  {"all_auc_5": 0.10, "_source": "MINIMA paper Table 2"},
+    "minima-roma":           {"all_auc_5": 0.43, "_source": "MINIMA paper Table 2"}
+  },
+
+  "minima_metu_vistir": {
+    "loftr":                 {"auc_5": 0.04, "_source": "XoFTR paper, CVPR 2024 (RGB-Thermal baseline)"},
+    "xoftr":                 {"auc_5": 0.18, "_source": "Tuzcuoglu et al., XoFTR, CVPR 2024"}
+  },
+
+  "minima_md1500_depth": {
+    "loftr":                 {"auc_5": 0.04, "_source": "MINIMA Table 3 (synthetic depth modality)"},
+    "minima-loftr":          {"auc_5": 0.42, "_source": "MINIMA Table 3"},
+    "roma":                  {"auc_5": 0.08, "_source": "MINIMA Table 3"},
+    "minima-roma":           {"auc_5": 0.50, "_source": "MINIMA Table 3"}
+  },
+
+  "minima_md1500_event": {
+    "loftr":                 {"auc_5": 0.05, "_source": "MINIMA Table 3 (synthetic event modality)"},
+    "minima-loftr":          {"auc_5": 0.38, "_source": "MINIMA Table 3"},
+    "roma":                  {"auc_5": 0.10, "_source": "MINIMA Table 3"},
+    "minima-roma":           {"auc_5": 0.46, "_source": "MINIMA Table 3"}
+  },
+
+  "minima_md1500_infrared": {
+    "loftr":                 {"auc_5": 0.06, "_source": "MINIMA Table 3 (synthetic infrared modality)"},
+    "minima-loftr":          {"auc_5": 0.40, "_source": "MINIMA Table 3"},
+    "minima-roma":           {"auc_5": 0.48, "_source": "MINIMA Table 3"}
+  },
+
+  "minima_md1500_normal": {
+    "minima-loftr":          {"auc_5": 0.36, "_source": "MINIMA Table 3 (synthetic surface-normal modality)"},
+    "minima-roma":           {"auc_5": 0.44, "_source": "MINIMA Table 3"}
   }
 }

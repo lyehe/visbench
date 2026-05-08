@@ -97,6 +97,23 @@ def monkeypatch_module():
 # --- Tests ------------------------------------------------------------------
 
 @pytest.mark.parametrize("name", ALL_DATASETS)
+def test_dataset_has_reference_entry(name):
+    """Every dataset must be covered by reference_scores.json — either via a
+    direct entry, an alias to another dataset, or an explicit
+    `_no_published_reference` marker. Catches new datasets that ship without
+    a corresponding row."""
+    from visbench.orchestrators.reporting import _load_references
+    refs, aliases, no_pub = _load_references()
+    if name in refs or name in aliases or name in no_pub:
+        return
+    pytest.fail(
+        f"{name}: not present in visbench/reference_scores.json. Add a direct "
+        f"entry with paper-cited numbers, or alias it via `_aliases`, or list "
+        f"it under `_no_published_reference` with a one-line explanation."
+    )
+
+
+@pytest.mark.parametrize("name", ALL_DATASETS)
 def test_spec_valid(name):
     spec = get(name)
     assert spec.task in VALID_TASKS, f"{name}: invalid task '{spec.task}'"
