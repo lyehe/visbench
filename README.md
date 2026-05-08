@@ -10,8 +10,14 @@ Benchmark harness for visual feature matching. Ships:
 ## Install
 
 ```bash
-git clone --recurse-submodules <visbench-url>
+git clone https://github.com/lyehe/visbench
 cd visbench
+
+# Pull only the vismatch submodule (one level deep). vismatch itself has 25+
+# nested matcher submodules (RoMa, LightGlue, DeDoDe, MASt3R, romaxx, ...) that
+# are NOT needed at install time — vismatch loads them lazily on first use.
+git submodule update --init third_party/vismatch
+
 uv venv
 uv pip install -e .
 uv pip install -e ./third_party/vismatch
@@ -19,11 +25,11 @@ uv pip install -e ./third_party/vismatch
 
 `uv` resolves torch from the CUDA 13.0 index pinned in `pyproject.toml` (matches vismatch's stack). For CPU-only or different CUDA, edit `[[tool.uv.index]]`.
 
-If you forgot `--recurse-submodules`:
-
-```bash
-git submodule update --init --recursive
-```
+> **Do not use `--recurse-submodules` or `git submodule update --init --recursive`.**
+> Those would clone every matcher repo nested inside vismatch (~tens of GB),
+> none of which are needed unless you actually call that specific matcher.
+> When you call e.g. `visbench:roma` for the first time, vismatch initialises
+> its own RoMa submodule on demand.
 
 ## Quickstart
 
