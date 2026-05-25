@@ -19,7 +19,8 @@ from .run import _evaluate, atomic_write_text, build_matcher, resolve_data_root
 def run_batch(method: str, datasets: list[str], out_dir: Path,
               data_root_default: Path,
               max_pairs: dict | None = None, ransac_runs: int = 5,
-              device: str = "cpu", skip_existing: bool = True) -> list[dict]:
+              device: str = "cpu", skip_existing: bool = True,
+              seed: int | None = 0) -> list[dict]:
     matcher = build_matcher(method, device=device)
     safe = method.replace(":", "-").replace("/", "-")
     out_dir = Path(out_dir)
@@ -40,7 +41,8 @@ def run_batch(method: str, datasets: list[str], out_dir: Path,
         try:
             metrics = _evaluate(spec.task, matcher, pairs,
                                 resize_long=spec.default_resize,
-                                ransac_runs=ransac_runs, progress=False)
+                                ransac_runs=ransac_runs, progress=False,
+                                seed=seed)
         except Exception as e:  # noqa: BLE001
             print(f"[fail] {ds} on {method}: {type(e).__name__}: {e}", file=sys.stderr)
             reset_caches()
@@ -49,6 +51,7 @@ def run_batch(method: str, datasets: list[str], out_dir: Path,
         rec = {
             "dataset": ds, "method": method, "device": device,
             "data_root": str(data_root), "max_pairs": mp,
+            "seed": seed,
             "metrics": metrics,
         }
         atomic_write_text(out_path, json.dumps(rec, indent=2))

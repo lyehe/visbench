@@ -14,12 +14,10 @@ import numpy as np
 
 from ..core.metrics.pose import compute_relative_pose
 from ._registry import DatasetSpec, register
-
-K_7SCENES = np.array([
-    [525.0, 0, 320.0],
-    [0, 525.0, 240.0],
-    [0, 0, 1.0],
-], dtype=np.float64)
+# Import the canonical K from seven_scenes to avoid drift — both modules
+# evaluate on the same RGB stream and must agree on focal length (the
+# Microsoft 7-Scenes page gives fx=fy=585 for the registered colour camera).
+from .seven_scenes import K_7SCENES
 
 
 def download(data_root: Path | str) -> Path:

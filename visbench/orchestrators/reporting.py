@@ -47,8 +47,8 @@ def _load_references() -> tuple[dict, dict, dict]:
     if not _REFERENCE_PATH.exists():
         return {}, {}, {}
     try:
-        raw = json.loads(_REFERENCE_PATH.read_text())
-    except Exception:
+        raw = json.loads(_REFERENCE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
         return {}, {}, {}
     aliases = raw.get("_aliases", {}) or {}
     no_pub = raw.get("_no_published_reference", {}) or {}

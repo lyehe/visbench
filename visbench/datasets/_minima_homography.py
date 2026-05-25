@@ -15,7 +15,6 @@ from pathlib import Path
 import cv2
 import numpy as np
 from numpy.random import uniform
-from scipy import stats
 
 MINIMA_DEFAULT_CONFIG = {
     "perspective": True,
@@ -41,6 +40,7 @@ def _seed_from_name(image_name: str) -> int:
 
 def sample_homography(shape, image_name: str, config: dict | None = None) -> np.ndarray:
     """Deterministic per-image-name homography matching MINIMA's sample_h."""
+    from scipy import stats  # noqa: PLC0415  (lazy: scipy only needed in this function)
     seed = _seed_from_name(image_name)
     np_state = np.random.get_state()
     np.random.seed(seed)

@@ -74,9 +74,23 @@ def _shear(sx: float):
     return make
 
 
+def _stable_rng(seed: int, w: int, h: int) -> np.random.Generator:
+    """Deterministic per-call RNG keyed on (seed, w, h).
+
+    The closure-style `rng = np.random.default_rng(seed)` at module import
+    time was a bug: state advanced across pairs, so a second iter_pairs() call
+    on the same process produced a different H_aug than the one already cached
+    to disk — silently desyncing H_gt from the warped image for
+    synthetic_perspective_* and synthetic_affine_random. Now H_aug is a pure
+    function of (seed, w, h), matching the on-disk cache semantics.
+    """
+    key = (int(seed) ^ int(w) ^ (int(h) << 16)) & 0xFFFFFFFF
+    return np.random.default_rng(key)
+
+
 def _perspective(strength: float, seed: int = 0):
-    rng = np.random.default_rng(seed)
     def make(w, h):
+        rng = _stable_rng(seed, w, h)
         d = strength * min(w, h)
         src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
         dst = src + rng.uniform(-d, d, src.shape).astype(np.float32)
@@ -93,8 +107,8 @@ def _perspective(strength: float, seed: int = 0):
 
 
 def _random_affine(seed: int = 0):
-    rng = np.random.default_rng(seed)
     def make(w, h):
+        rng = _stable_rng(seed, w, h)
         theta = rng.uniform(-30, 30) * np.pi / 180.0
         s = rng.uniform(0.8, 1.3)
         sh = rng.uniform(-0.15, 0.15)

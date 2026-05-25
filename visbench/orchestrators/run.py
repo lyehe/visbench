@@ -149,6 +149,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
     record = {
         "dataset": dataset, "method": method, "device": device,
         "data_root": str(data_root), "max_pairs": max_pairs,
+        "seed": seed,
         "metrics": metrics,
     }
     if out is not None:

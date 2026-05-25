@@ -56,6 +56,7 @@ class DescriptorPair(_Base, total=False):
     kpts_A: "np.ndarray"
     kpts_B: "np.ndarray"
     kpt_sizes_A: "np.ndarray"
+    kpt_sizes_B: "np.ndarray"
 
 
 REQUIRED_KEYS_BY_TASK: dict[str, tuple[str, ...]] = {

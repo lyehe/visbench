@@ -3,7 +3,7 @@
 Benchmark harness for visual feature matching. Ships:
 
 - **Core harness** — pose / homography / classical metrics with shared image caching, RANSAC dispatch, and AUC reporting.
-- **~40 datasets** — registered behind a single interface with `download(data_root)` and `iter_pairs(data_root)`.
+- **130+ datasets** — registered behind a single interface with `download(data_root)` and `iter_pairs(data_root)`. Run `visbench list datasets` for the full set.
 - **Reference methods** — OpenCV classical (SIFT, RootSIFT, ORB, AKAZE, BRISK) plus a passthrough to any matcher in [vismatch](https://github.com/gmberton/vismatch).
 - **Standard CLI** — `visbench download`, `visbench run`, `visbench standard`, `visbench report`.
 
@@ -38,14 +38,15 @@ visbench list datasets
 visbench list methods
 
 visbench download hpatches
-visbench run --dataset hpatches --method sift --max-pairs 50 --out results/
+# --out takes a FILE path; pick a per-cell name to avoid silent overwrite
+visbench run --dataset hpatches --method sift --max-pairs 50 --out results/hpatches__sift.json
 
 # Run any vismatch matcher by name:
 visbench run --dataset hpatches --method vismatch:lightglue --max-pairs 50
 
 # Standard panel (multiple datasets x methods):
 visbench standard --panel core --methods panels/classical_methods.txt --out-dir results/
-visbench report --results-dir results/ --top 10
+visbench report --results-dir results/ --top-k 10
 ```
 
 ## Datasets and benchmarks

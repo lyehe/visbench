@@ -19,8 +19,8 @@ def download(data_root: Path | str) -> Path:
     if any(data_root.glob("pairs-*.txt")):
         return data_root
     raise NotImplementedError(
-        "Aachen v1.1: download images_upright/ from CIIRC and pair lists from\n"
-        "cvg/Hierarchical-Localization; place under {data_root}."
+        f"Aachen v1.1: download images_upright/ from CIIRC and pair lists from\n"
+        f"cvg/Hierarchical-Localization; place under {data_root}."
     )
 
 

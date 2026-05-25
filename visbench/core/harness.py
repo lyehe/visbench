@@ -50,6 +50,49 @@ MIN_HOMOG_MATCHES = 4    # cv2.findHomography minimum.
 _EPS = 1e-12
 
 
+def _warn_pair_failure(fn_name: str, im_A_path, im_B_path, exc, n_failures: int) -> None:
+    """Per-pair failure warning, capped at WARN_FAILURE_LIMIT.
+
+    Centralised so changing the cap or message format touches one place rather
+    than the 5 eval_* functions.
+    """
+    if n_failures <= WARN_FAILURE_LIMIT:
+        a = getattr(im_A_path, "name", str(im_A_path))
+        b = getattr(im_B_path, "name", str(im_B_path))
+        warnings.warn(
+            f"{fn_name}: pair failed ({type(exc).__name__}: {exc}); "
+            f"skipping {a} <-> {b}",
+            stacklevel=3,
+        )
+
+
+def _warn_summary(fn_name: str, n_consumed: int, n_failures: int,
+                  fallback_note: str) -> None:
+    """End-of-loop summary warning: zero-input + failure-count."""
+    if n_consumed == 0:
+        warnings.warn(f"{fn_name}: zero pairs consumed.", stacklevel=2)
+    if n_failures > 0:
+        warnings.warn(
+            f"{fn_name}: {n_failures} pair(s) failed; {fallback_note}",
+            stacklevel=2,
+        )
+
+
+def _safe_mean(seq) -> float:
+    """np.mean(seq) when non-empty, else 0.0 — saves a one-liner per metric."""
+    return float(np.mean(seq)) if len(seq) > 0 else 0.0
+
+
+def _append_by_subset(buckets: dict, subset: str, value) -> None:
+    """Append `value` to buckets[subset] and (if subset != 'all') also to
+    buckets['all']. Centralises the per-subset+overall aggregation idiom and
+    avoids the double-append bug when subset itself is 'all' (which previously
+    inflated num_pairs to 2x for datasets like evd that don't set a subset)."""
+    buckets.setdefault(subset, []).append(value)
+    if subset != "all":
+        buckets.setdefault("all", []).append(value)
+
+
 def _scale_K(K: np.ndarray, scale_x: float, scale_y: float) -> np.ndarray:
     K = K.copy()
     K[0] *= scale_x
@@ -145,12 +188,7 @@ def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 
             timings.append(time.time() - t0)
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= WARN_FAILURE_LIMIT:
-                warnings.warn(
-                    f"eval_pose_pairs: pair failed ({type(e).__name__}: {e}); "
-                    f"skipping {im_A_path.name} <-> {im_B_path.name}",
-                    stacklevel=2,
-                )
+            _warn_pair_failure("eval_pose_pairs", im_A_path, im_B_path, e, n_pair_failures)
             for _ in range(ransac_runs):
                 tot_err_pose.append(POSE_FAIL_DEG)
                 tot_err_t.append(POSE_FAIL_DEG)
@@ -199,13 +237,8 @@ def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 
             tot_err_R.append(e_R)
             tot_err_pose.append(max(e_t, e_R))
 
-    if not match_counts:
-        warnings.warn("eval_pose_pairs: zero pairs consumed.", stacklevel=2)
-    if n_pair_failures > 0:
-        warnings.warn(
-            f"eval_pose_pairs: {n_pair_failures} pair(s) failed and were counted as POSE_FAIL_DEG.",
-            stacklevel=2,
-        )
+    _warn_summary("eval_pose_pairs", len(match_counts), n_pair_failures,
+                  "counted as POSE_FAIL_DEG.")
     errs = np.array(tot_err_pose) if tot_err_pose else np.array([POSE_FAIL_DEG])
     aucs = pose_auc(errs, list(thresholds))
     acc = {f"acc_{int(t)}": float((errs < t).mean()) for t in thresholds}
@@ -215,12 +248,12 @@ def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 
         "num_pair_failures": n_pair_failures,
         "num_pairs": len(match_counts),
         "num_ransac_runs": ransac_runs,
-        "mean_matches": float(np.mean(match_counts)) if match_counts else 0.0,
-        "mean_inliers": float(np.mean(inlier_counts)) if inlier_counts else 0.0,
-        "mean_epi_precision_2px": float(np.mean(epipolar_precision)) if epipolar_precision else 0.0,
-        "mean_kpts0": float(np.mean(n_kpts0)) if n_kpts0 else 0.0,
-        "mean_kpts1": float(np.mean(n_kpts1)) if n_kpts1 else 0.0,
-        "mean_time_s": float(np.mean(timings)) if timings else 0.0,
+        "mean_matches": _safe_mean(match_counts),
+        "mean_inliers": _safe_mean(inlier_counts),
+        "mean_epi_precision_2px": _safe_mean(epipolar_precision),
+        "mean_kpts0": _safe_mean(n_kpts0),
+        "mean_kpts1": _safe_mean(n_kpts1),
+        "mean_time_s": _safe_mean(timings),
         "resize_long": resize_long,
     }
 
@@ -256,16 +289,10 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
             timings.append(time.time() - t0)
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= WARN_FAILURE_LIMIT:
-                warnings.warn(
-                    f"eval_homography_pairs: pair failed ({type(e).__name__}: {e}); "
-                    f"skipping {im_A_path.name} <-> {im_B_path.name}",
-                    stacklevel=2,
-                )
+            _warn_pair_failure("eval_homography_pairs", im_A_path, im_B_path, e, n_pair_failures)
             w0, h0 = _pil_size(im_A_path)
             err = float(max(w0, h0))
-            errors_by_subset.setdefault(subset, []).append(err)
-            errors_by_subset.setdefault("all", []).append(err)
+            _append_by_subset(errors_by_subset, subset, err)
             match_counts.append(0)
             n_kpts0.append(0)
             n_kpts1.append(0)
@@ -283,9 +310,14 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
         k1 = kpts1.copy().astype(np.float64) if len(kpts1) else kpts1
         ak0 = all_k0.copy().astype(np.float64) if len(all_k0) else all_k0
         ak1 = all_k1.copy().astype(np.float64) if len(all_k1) else all_k1
-        if resize_long is not None and len(k0):
-            k0[:, 0] /= sx0; k0[:, 1] /= sy0
-            k1[:, 0] /= sx1; k1[:, 1] /= sy1
+        # Rescale matched and all-kpts INDEPENDENTLY — a matcher with zero
+        # matches but non-empty detections still needs all-kpts in the original
+        # frame so repeatability / matching_score (which use H_gt in the
+        # original frame) compute comparable coordinates.
+        if resize_long is not None:
+            if len(k0):
+                k0[:, 0] /= sx0; k0[:, 1] /= sy0
+                k1[:, 0] /= sx1; k1[:, 1] /= sy1
             if len(ak0):
                 ak0[:, 0] /= sx0; ak0[:, 1] /= sy0
             if len(ak1):
@@ -297,28 +329,16 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
         else:
             H_est = None
         err = float(max(w0, h0)) if H_est is None else homography_corner_error(H_est, H_gt, w0, h0)
-        errors_by_subset.setdefault(subset, []).append(err)
-        errors_by_subset.setdefault("all", []).append(err)
-
-        mma = mma_homography(k0, k1, H_gt, thresholds=mma_thresholds)
-        mma_by_subset.setdefault(subset, []).append(mma)
-        mma_by_subset.setdefault("all", []).append(mma)
-
+        _append_by_subset(errors_by_subset, subset, err)
+        _append_by_subset(mma_by_subset, subset,
+                          mma_homography(k0, k1, H_gt, thresholds=mma_thresholds))
         rep = repeatability(ak0, ak1, H_gt, image_shape1=(h1, w1), px_thresh=3.0)
-        repeat_by_subset.setdefault(subset, []).append(rep["repeatability"])
-        repeat_by_subset.setdefault("all", []).append(rep["repeatability"])
-
+        _append_by_subset(repeat_by_subset, subset, rep["repeatability"])
         ms = matching_score(k0, k1, ak0, H_gt, image_shape1=(h1, w1), px_thresh=3.0)
-        mscore_by_subset.setdefault(subset, []).append(ms)
-        mscore_by_subset.setdefault("all", []).append(ms)
+        _append_by_subset(mscore_by_subset, subset, ms)
 
-    if not match_counts:
-        warnings.warn("eval_homography_pairs: zero pairs consumed.", stacklevel=2)
-    if n_pair_failures > 0:
-        warnings.warn(
-            f"eval_homography_pairs: {n_pair_failures} pair(s) failed; counted as worst-case AUC.",
-            stacklevel=2,
-        )
+    _warn_summary("eval_homography_pairs", len(match_counts), n_pair_failures,
+                  "counted as worst-case AUC.")
     out = {"num_pair_failures": n_pair_failures}
     for subset, errs in errors_by_subset.items():
         aucs = hpatches_auc(np.array(errs), list(thresholds))
@@ -332,10 +352,10 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
         out[f"{subset}_repeatability"] = float(np.mean(vals))
     for subset, vals in mscore_by_subset.items():
         out[f"{subset}_matching_score"] = float(np.mean(vals))
-    out["mean_time_s"] = float(np.mean(timings)) if timings else 0.0
-    out["mean_matches"] = float(np.mean(match_counts)) if match_counts else 0.0
-    out["mean_kpts0"] = float(np.mean(n_kpts0)) if n_kpts0 else 0.0
-    out["mean_kpts1"] = float(np.mean(n_kpts1)) if n_kpts1 else 0.0
+    out["mean_time_s"] = _safe_mean(timings)
+    out["mean_matches"] = _safe_mean(match_counts)
+    out["mean_kpts0"] = _safe_mean(n_kpts0)
+    out["mean_kpts1"] = _safe_mean(n_kpts1)
     out["resize_long"] = resize_long
     return out
 
@@ -386,15 +406,9 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
             kpts1 = np.asarray(result["matched_kpts1"], dtype=np.float64).copy()
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= WARN_FAILURE_LIMIT:
-                warnings.warn(
-                    f"eval_correspondence_pairs: pair failed ({type(e).__name__}: {e}); "
-                    f"skipping {im_A_path.name} <-> {im_B_path.name}",
-                    stacklevel=2,
-                )
+            _warn_pair_failure("eval_correspondence_pairs", im_A_path, im_B_path, e, n_pair_failures)
             zero_pck = np.zeros(len(ths_arr), dtype=np.float64)
-            pck_by_subset.setdefault(subset, []).append(zero_pck)
-            pck_by_subset.setdefault("all", []).append(zero_pck)
+            _append_by_subset(pck_by_subset, subset, zero_pck)
             match_counts.append(0)
             inlier_counts.append(0)
             n_kpts0.append(0)
@@ -428,16 +442,10 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
 
         errs = _epi_distance(F_pred, gt_resized[:, :2], gt_resized[:, 2:4])
         pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
-        pck_by_subset.setdefault(subset, []).append(pck)
-        pck_by_subset.setdefault("all", []).append(pck)
+        _append_by_subset(pck_by_subset, subset, pck)
 
-    if not match_counts:
-        warnings.warn("eval_correspondence_pairs: zero pairs consumed.", stacklevel=2)
-    if n_pair_failures > 0:
-        warnings.warn(
-            f"eval_correspondence_pairs: {n_pair_failures} pair(s) failed; PCK=0 for those.",
-            stacklevel=2,
-        )
+    _warn_summary("eval_correspondence_pairs", len(match_counts), n_pair_failures,
+                  "PCK=0 for those.")
     out: dict = {"num_pair_failures": n_pair_failures}
     for subset, vecs in pck_by_subset.items():
         if not vecs:
@@ -451,11 +459,11 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
         if len(avg) > 10:
             out[f"{subset}_pck_10"] = float(avg[10])
         out[f"{subset}_num_pairs"] = len(vecs)
-    out["mean_time_s"] = float(np.mean(timings)) if timings else 0.0
-    out["mean_matches"] = float(np.mean(match_counts)) if match_counts else 0.0
-    out["mean_inliers"] = float(np.mean(inlier_counts)) if inlier_counts else 0.0
-    out["mean_kpts0"] = float(np.mean(n_kpts0)) if n_kpts0 else 0.0
-    out["mean_kpts1"] = float(np.mean(n_kpts1)) if n_kpts1 else 0.0
+    out["mean_time_s"] = _safe_mean(timings)
+    out["mean_matches"] = _safe_mean(match_counts)
+    out["mean_inliers"] = _safe_mean(inlier_counts)
+    out["mean_kpts0"] = _safe_mean(n_kpts0)
+    out["mean_kpts1"] = _safe_mean(n_kpts1)
     out["resize_long"] = resize_long
     return out
 
@@ -488,15 +496,9 @@ def eval_fundamental_pairs(matcher, pairs, resize_long: int | None = None,
             timings.append(time.time() - t0)
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= WARN_FAILURE_LIMIT:
-                warnings.warn(
-                    f"eval_fundamental_pairs: pair failed ({type(e).__name__}: {e}); "
-                    f"skipping {im_A_path.name} <-> {im_B_path.name}",
-                    stacklevel=2,
-                )
+            _warn_pair_failure("eval_fundamental_pairs", im_A_path, im_B_path, e, n_pair_failures)
             zero_pck = np.zeros(len(thresholds), dtype=np.float64)
-            pck_by_subset.setdefault(subset, []).append(zero_pck)
-            pck_by_subset.setdefault("all", []).append(zero_pck)
+            _append_by_subset(pck_by_subset, subset, zero_pck)
             match_counts.append(0)
             n_kpts0.append(0)
             n_kpts1.append(0)
@@ -520,16 +522,10 @@ def eval_fundamental_pairs(matcher, pairs, resize_long: int | None = None,
         else:
             errs = _epi_distance(F_gt, kpts0, kpts1)
             pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
-        pck_by_subset.setdefault(subset, []).append(pck)
-        pck_by_subset.setdefault("all", []).append(pck)
+        _append_by_subset(pck_by_subset, subset, pck)
 
-    if not match_counts:
-        warnings.warn("eval_fundamental_pairs: zero pairs consumed.", stacklevel=2)
-    if n_pair_failures > 0:
-        warnings.warn(
-            f"eval_fundamental_pairs: {n_pair_failures} pair(s) failed; PCK=0 for those.",
-            stacklevel=2,
-        )
+    _warn_summary("eval_fundamental_pairs", len(match_counts), n_pair_failures,
+                  "PCK=0 for those.")
 
     out: dict = {"num_pair_failures": n_pair_failures}
     for subset, vecs in pck_by_subset.items():
@@ -641,6 +637,9 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
         sizes_A = np.asarray(pair.get("kpt_sizes_A",
                                        np.full(len(kpts_A), DEFAULT_KPT_SIZE_PX, dtype=np.float32)),
                               dtype=np.float32)
+        sizes_B = np.asarray(pair.get("kpt_sizes_B",
+                                       np.full(len(kpts_B), DEFAULT_KPT_SIZE_PX, dtype=np.float32)),
+                              dtype=np.float32)
         subset = str(pair.get("subset") or "all")
 
         rawA = cv2.imread(str(im_A_path), cv2.IMREAD_COLOR)
@@ -652,7 +651,7 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
 
         t0 = time.time()
         rA = _matcher_describe(matcher, rawA, kpts_A, sizes_A)
-        rB = _matcher_describe(matcher, rawB, kpts_B, sizes_A)
+        rB = _matcher_describe(matcher, rawB, kpts_B, sizes_B)
         timings.append(time.time() - t0)
         if rA is None or rB is None:
             skipped = True
@@ -663,8 +662,7 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
         if n < 8:
             continue
         m = _compute_map_topk(d_a[:n], d_b[:n], metric=metric)
-        metrics_by_subset.setdefault(subset, []).append(m)
-        metrics_by_subset.setdefault("all", []).append(m)
+        _append_by_subset(metrics_by_subset, subset, m)
 
     out: dict = {"skipped": skipped}
     for subset, results in metrics_by_subset.items():
@@ -675,6 +673,6 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
         out[f"{subset}_mAP"] = float(np.mean([r["mAP"] for r in results]))
         out[f"{subset}_n_pairs"] = len(results)
         out[f"{subset}_n_kpts"] = int(np.sum([r["n"] for r in results]))
-    out["mean_time_s"] = float(np.mean(timings)) if timings else 0.0
+    out["mean_time_s"] = _safe_mean(timings)
     out["resize_long"] = resize_long
     return out

@@ -1,13 +1,13 @@
 """visbench CLI dispatch.
 
 Subcommands:
-  list datasets          show registered datasets (name, task, default_root)
-  list methods           show registered methods + (if vismatch installed) vismatch matchers
-  download <name|--all>  download / prepare a dataset
-  run                    one (dataset, method) cell
-  batch                  one method, many datasets
-  standard               panel-based (datasets x methods) sweep
-  report                 aggregate per-cell JSONs into ranking tables
+  list {datasets|methods|tasks}  show registered datasets / methods / known tasks
+  download <name|--all-auto>     download / prepare a dataset (--all-auto for every
+                                 dataset whose download() is automatic)
+  run                            one (dataset, method) cell
+  batch                          one method, many datasets
+  standard                       panel-based (datasets x methods) sweep
+  report                         aggregate per-cell JSONs into ranking tables
 """
 
 from __future__ import annotations
@@ -149,6 +149,7 @@ def _cmd_batch(args):
         data_root_default=data_root_default,
         max_pairs=mp, ransac_runs=args.ransac_runs, device=device,
         skip_existing=not args.no_skip,
+        seed=args.seed,
     )
 
 
@@ -174,6 +175,7 @@ def _cmd_standard(args):
             ransac_runs=args.ransac_runs,
             per_method_timeout=args.per_method_timeout,
             skip_existing=not args.no_skip,
+            seed=args.seed,
         )
         return
 
@@ -185,6 +187,7 @@ def _cmd_standard(args):
         max_pairs_homography=args.max_pairs_homography,
         ransac_runs=args.ransac_runs, device=device,
         skip_existing=not args.no_skip,
+        seed=args.seed,
     )
 
 
@@ -257,7 +260,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     "Default: vismatch.get_default_device() or auto.")
     pr.add_argument("--out", default=None,
                     help="Write per-cell JSON to this path (in addition to stdout).")
-    pr.add_argument("--no-progress", action="store_true",
+    pr.add_argument("--no-progress", "--quiet", dest="no_progress",
+                    action="store_true",
                     help="Suppress the tqdm progress bar.")
     pr.add_argument("--seed", type=int, default=0,
                     help="RNG seed for ransac-shuffle reproducibility (default 0; "
@@ -284,6 +288,8 @@ def _build_parser() -> argparse.ArgumentParser:
     # positive equivalent. Both map to the same flag value.
     pb.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
                     help="Re-run cells even if their JSON already exists.")
+    pb.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for reproducibility (default 0); recorded in each cell JSON.")
     pb.set_defaults(func=_cmd_batch)
 
     # standard
@@ -313,13 +319,18 @@ def _build_parser() -> argparse.ArgumentParser:
                     "Children are killed on timeout to avoid orphan GPU processes.")
     ps.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
                     help="Re-run cells even if their JSON already exists.")
+    ps.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for reproducibility (default 0); applied to every cell.")
     ps.set_defaults(func=_cmd_standard)
 
     # report
     prp = sub.add_parser("report", help="Aggregate JSONs into ranking tables")
-    prp.add_argument("--results-dir", required=True)
-    prp.add_argument("--top-k", type=int, default=25)
-    prp.add_argument("--no-reference", action="store_true",
+    prp.add_argument("--results-dir", required=True,
+                     help="Directory containing per-cell JSONs written by `visbench run` / batch / standard.")
+    prp.add_argument("--top-k", type=int, default=25,
+                     help="Show only the top K methods per dataset (default: 25).")
+    prp.add_argument("--no-reference", "--hide-reference",
+                     dest="no_reference", action="store_true",
                      help="Suppress 'ref:' rows from reference_scores.json.")
     prp.add_argument("--json-out", default=None,
                      help="Write the aggregated report as JSON to this path "
