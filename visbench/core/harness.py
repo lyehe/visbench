@@ -102,12 +102,17 @@ def _prepare_pair_images(matcher, im_A_path, im_B_path,
 
 
 def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 5,
-                    thresholds=(5, 10, 20), progress: bool = True):
+                    thresholds=(5, 10, 20), progress: bool = True,
+                    seed: int | None = 0):
     """`pairs` yields {im_A_path, im_B_path, K0, K1, R_0to1, t_0to1}.
 
     RoMa/LoFTR MegaDepth convention: long-side resize, scale K, essential-matrix
     RANSAC averaged over `ransac_runs` shuffles, AUC at thresholds in degrees.
+
+    `seed`: integer seed for the per-pair shuffle RNG. Default 0 for
+    reproducible runs; pass `None` to use a fresh entropy-seeded RNG.
     """
+    rng = np.random.default_rng(seed)
     tot_err_pose, tot_err_t, tot_err_R = [], [], []
     timings, inlier_counts, match_counts = [], [], []
     epipolar_precision, n_kpts0, n_kpts1 = [], [], []
@@ -176,7 +181,7 @@ def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 
                 tot_err_t.append(POSE_FAIL_DEG)
                 tot_err_R.append(POSE_FAIL_DEG)
                 continue
-            perm = np.random.permutation(len(kpts0))
+            perm = rng.permutation(len(kpts0))
             k0p = kpts0[perm]
             k1p = kpts1[perm]
             norm_thr = POSE_RANSAC_PX / (

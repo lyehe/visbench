@@ -116,6 +116,7 @@ def _cmd_run(args):
         ransac_runs=args.ransac_runs, device=device,
         out=Path(args.out) if args.out else None,
         progress=not args.no_progress,
+        seed=args.seed,
     )
     print(json.dumps(record, indent=2))
 
@@ -184,7 +185,8 @@ def _cmd_standard(args):
 def _cmd_report(args):
     from .orchestrators.reporting import report
     report(Path(args.results_dir), top_k=args.top_k,
-           show_reference=not args.no_reference)
+           show_reference=not args.no_reference,
+           json_out=Path(args.json_out) if args.json_out else None)
 
 
 def _resolve_panel(name_or_path: str) -> Path:
@@ -239,6 +241,8 @@ def _build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--device", default=None)
     pr.add_argument("--out", default=None)
     pr.add_argument("--no-progress", action="store_true")
+    pr.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for ransac-shuffle reproducibility (default 0).")
     pr.set_defaults(func=_cmd_run)
 
     # batch
@@ -250,7 +254,9 @@ def _build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--max-pairs", type=int, default=None)
     pb.add_argument("--ransac-runs", type=int, default=5)
     pb.add_argument("--device", default=None)
-    pb.add_argument("--no-skip", action="store_true",
+    # Negative `--no-skip` kept for backward compat; `--rerun` is the modern
+    # positive equivalent. Both map to the same flag value.
+    pb.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
                     help="Re-run cells even if their JSON already exists.")
     pb.set_defaults(func=_cmd_batch)
 
@@ -272,7 +278,8 @@ def _build_parser() -> argparse.ArgumentParser:
                     "subprocess execution; one method per device, round-robin.")
     ps.add_argument("--per-method-timeout", type=float, default=None,
                     help="Timeout (seconds) per method subprocess in parallel mode.")
-    ps.add_argument("--no-skip", action="store_true")
+    ps.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
+                    help="Re-run cells even if their JSON already exists.")
     ps.set_defaults(func=_cmd_standard)
 
     # report
@@ -281,6 +288,9 @@ def _build_parser() -> argparse.ArgumentParser:
     prp.add_argument("--top-k", type=int, default=25)
     prp.add_argument("--no-reference", action="store_true",
                      help="Suppress 'ref:' rows from reference_scores.json.")
+    prp.add_argument("--json-out", default=None,
+                     help="Write the aggregated report as JSON to this path "
+                     "(in addition to printing the table to stdout).")
     prp.set_defaults(func=_cmd_report)
 
     return p

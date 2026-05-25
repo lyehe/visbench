@@ -78,18 +78,18 @@ def _qualitative_sweep(matcher, pairs, resize_long=None):
 # signature so the dispatcher is a one-line lookup and adding a new task means
 # adding a row, not a branch.
 _TASK_DISPATCH = {
-    "pose": lambda m, p, *, resize_long, ransac_runs, progress:
+    "pose": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         eval_pose_pairs(m, p, resize_long=resize_long,
-                        ransac_runs=ransac_runs, progress=progress),
-    "homography": lambda m, p, *, resize_long, ransac_runs, progress:
+                        ransac_runs=ransac_runs, progress=progress, seed=seed),
+    "homography": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         eval_homography_pairs(m, p, resize_long=resize_long, progress=progress),
-    "correspondence": lambda m, p, *, resize_long, ransac_runs, progress:
+    "correspondence": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         eval_correspondence_pairs(m, p, resize_long=resize_long, progress=progress),
-    "fundamental": lambda m, p, *, resize_long, ransac_runs, progress:
+    "fundamental": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         eval_fundamental_pairs(m, p, resize_long=resize_long, progress=progress),
-    "descriptor": lambda m, p, *, resize_long, ransac_runs, progress:
+    "descriptor": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         eval_descriptor_pairs(m, p, resize_long=resize_long, progress=progress),
-    "qualitative": lambda m, p, *, resize_long, ransac_runs, progress:
+    "qualitative": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         _qualitative_sweep(m, p, resize_long=resize_long),
 }
 
@@ -99,11 +99,12 @@ def known_tasks() -> tuple[str, ...]:
     return tuple(_TASK_DISPATCH)
 
 
-def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs, progress):
+def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs,
+              progress, seed: int | None = 0):
     fn = _TASK_DISPATCH.get(spec_task)
     if fn is not None:
         return fn(matcher, pairs, resize_long=resize_long,
-                  ransac_runs=ransac_runs, progress=progress)
+                  ransac_runs=ransac_runs, progress=progress, seed=seed)
     # Unknown / future task — degrade gracefully to a qualitative sweep so
     # any new dataset still produces SOMETHING comparable across matchers.
     import warnings
@@ -118,7 +119,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
             data_root_default: Path, max_pairs: int | None = None,
             resize: int | None = None, ransac_runs: int = 5,
             device: str = "cpu", out: Path | None = None,
-            progress: bool = True) -> dict:
+            progress: bool = True, seed: int | None = 0) -> dict:
     spec = get_dataset_spec(dataset)
     data_root = resolve_data_root(spec, data_root_override, data_root_default)
     if not data_root.exists():
@@ -134,7 +135,8 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
 
     t0 = time.time()
     metrics = _evaluate(spec.task, matcher, pairs,
-                        resize_long=resize_long, ransac_runs=ransac_runs, progress=progress)
+                        resize_long=resize_long, ransac_runs=ransac_runs,
+                        progress=progress, seed=seed)
     metrics["total_time_s"] = time.time() - t0
 
     record = {

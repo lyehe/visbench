@@ -169,14 +169,8 @@ def test_download_behaviour(name, patched_download):
 
 # --- Opt-in real-data smoke test -------------------------------------------
 
-_PAIR_KEYS_BY_TASK = {
-    "pose":          ("im_A_path", "im_B_path", "K0", "K1", "R_0to1", "t_0to1"),
-    "homography":    ("im_A_path", "im_B_path", "H_gt"),
-    "correspondence":("im_A_path", "im_B_path", "corrs"),
-    "fundamental":   ("im_A_path", "im_B_path", "F_gt"),
-    "descriptor":    ("im_A_path", "im_B_path", "kpts_A", "kpts_B"),
-    "qualitative":   ("im_A_path", "im_B_path"),
-}
+# Pull from the single source of truth so a new task added there is auto-covered.
+from visbench.core.pair_schema import REQUIRED_KEYS_BY_TASK as _PAIR_KEYS_BY_TASK
 
 
 @pytest.mark.skipif(not os.environ.get("VISBENCH_SMOKE"),

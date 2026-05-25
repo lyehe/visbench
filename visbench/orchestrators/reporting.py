@@ -73,11 +73,25 @@ def _pose(m, key="auc_5"):
 def report(results_dir: Path, top_k: int = 25,
            hp_panel: list[str] | None = None,
            pose_panel: list[str] | None = None,
-           show_reference: bool = True) -> None:
+           show_reference: bool = True,
+           json_out: Path | None = None) -> dict:
+    """Aggregate per-cell JSONs into a ranking table.
+
+    Prints a human-readable table to stdout. If `json_out` is set, also writes
+    the aggregated data (per-dataset rankings + combined leaderboard) as JSON
+    to that path so it can be consumed by downstream tooling.
+
+    Returns the structured payload (whether or not it was written to disk).
+    """
     hp_panel = hp_panel or HP_PANEL_DEFAULT
     pose_panel = pose_panel or POSE_PANEL_DEFAULT
     rows = _load_results(results_dir)
     refs, aliases, no_published = (_load_references() if show_reference else ({}, {}, {}))
+    payload: dict = {
+        "results_dir": str(results_dir),
+        "per_dataset": {},
+        "combined": [],
+    }
 
     print(f"\n# VISBENCH REPORT  ({results_dir})\n")
     print(f"Methods with at least one result: {len(rows)}")
@@ -130,9 +144,19 @@ def report(results_dir: Path, top_k: int = 25,
         if is_hp:
             print(f"### {ds}  (homography, AUC@5/AUC@10/MMA@3)\n")
             print(f"  {'method':<45} AUC@5   AUC@10  MMA@3")
+            payload["per_dataset"][ds] = {
+                "metric_labels": ["AUC@5", "AUC@10", "MMA@3"],
+                "rows": [{"kind": k, "method": n, "values": [a, b, c]}
+                         for k, n, a, b, c in candidates],
+            }
         else:
             print(f"### {ds}  (pose, AUC@5/10/20 deg)\n")
             print(f"  {'method':<45} AUC@5   AUC@10  AUC@20")
+            payload["per_dataset"][ds] = {
+                "metric_labels": ["AUC@5", "AUC@10", "AUC@20"],
+                "rows": [{"kind": k, "method": n, "values": [a, b, c]}
+                         for k, n, a, b, c in candidates],
+            }
         for kind, name, a, b, c in candidates:
             label = (f"ref: {name}" if kind == "ref" else name)[:43]
             print(f"  {label:<45} {a:.3f}   {b:.3f}   {c:.3f}")
@@ -162,9 +186,24 @@ def report(results_dir: Path, top_k: int = 25,
     print(header)
     for name, mean, n, dsmap in combined[:top_k]:
         cells = []
+        cell_values = []
         for ds in hp_panel:
-            cells.append(f"{_hp(dsmap[ds], 'all_auc_5'):.3f}" if ds in dsmap else "  -  ")
+            v = _hp(dsmap[ds], 'all_auc_5') if ds in dsmap else None
+            cells.append(f"{v:.3f}" if v is not None else "  -  ")
+            cell_values.append({"dataset": ds, "value": v})
         for ds in pose_panel:
-            cells.append(f"{_pose(dsmap[ds], 'auc_5'):.3f}" if ds in dsmap else "  -  ")
+            v = _pose(dsmap[ds], 'auc_5') if ds in dsmap else None
+            cells.append(f"{v:.3f}" if v is not None else "  -  ")
+            cell_values.append({"dataset": ds, "value": v})
         print(f"  {name[:46]:<48} {mean:.3f}  {n}     {' '.join(cells)}")
+        payload["combined"].append({
+            "method": name, "mean": mean, "n_datasets": n, "cells": cell_values,
+        })
     print()
+
+    if json_out is not None:
+        json_out = Path(json_out)
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        print(f"wrote {json_out}")
+    return payload
