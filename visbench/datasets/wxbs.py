@@ -88,11 +88,11 @@ def download_hf_wxbs(data_root: Path | str) -> Path:
 
 
 def iter_pairs_hf(data_root: Path | str, max_pairs: int | None = None) -> Iterator[dict]:
-    import pyarrow.parquet as pq
     data_root = Path(data_root)
     test_pq = data_root / "data" / "test-00000-of-00001.parquet"
     if not test_pq.exists():
         return
+    import pyarrow.parquet as pq  # noqa: PLC0415  (lazy: pyarrow only needed when data exists)
     cache_dir = data_root / _CACHE_NAME
     cache_dir.mkdir(parents=True, exist_ok=True)
     table = pq.read_table(str(test_pq)).to_pylist()

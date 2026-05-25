@@ -7,9 +7,9 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PIL import Image
 from tqdm import tqdm
 
+from . import _image_cache
 from .metrics.pose import (
     compute_pose_error,
     estimate_pose_essential,
@@ -31,11 +31,23 @@ from .metrics.classical import (
 # ---- Tunables -------------------------------------------------------------
 POSE_RANSAC_PX = float(os.environ.get("VISBENCH_POSE_RANSAC_PX", 0.5))
 HOMOG_RANSAC_PX_BASE = float(os.environ.get("VISBENCH_HOMOG_RANSAC_PX_BASE", 3.0))
-HOMOG_REF_MIN_SIDE = 480.0
+HOMOG_REF_MIN_SIDE = 480.0  # HPatches-canonical threshold-scaling reference.
 FUND_RANSAC_PX = float(os.environ.get("VISBENCH_FUND_RANSAC_PX", 0.5))
 FUND_RANSAC_CONF = 0.999
 FUND_RANSAC_MAX_ITERS = 100_000
+
+# Fallback metric values used when a pair / matcher / RANSAC fails. Centralised
+# here so the value is consistent across all eval_* functions and tests.
 POSE_FAIL_DEG = 90.0
+DEFAULT_KPT_SIZE_PX = 8.0
+EPI_PRECISION_THRESH_PX = 2.0
+WARN_FAILURE_LIMIT = 3  # Stop spamming after this many per-pair failure warnings.
+MIN_POSE_MATCHES = 5     # cv2.findEssentialMat minimum for 5-point algorithm.
+MIN_FUND_MATCHES = 8     # cv2.findFundamentalMat minimum for 8-point algorithm.
+MIN_HOMOG_MATCHES = 4    # cv2.findHomography minimum.
+
+# Numerical floor used wherever we divide by a possibly-tiny norm.
+_EPS = 1e-12
 
 
 def _scale_K(K: np.ndarray, scale_x: float, scale_y: float) -> np.ndarray:
@@ -45,38 +57,14 @@ def _scale_K(K: np.ndarray, scale_x: float, scale_y: float) -> np.ndarray:
     return K
 
 
-_SIZE_CACHE: dict = {}
-_IMAGE_CACHE: dict = {}
-_IMAGE_CACHE_MAX = int(os.environ.get("VISBENCH_IMG_CACHE_MAX", 256))
+# Backwards-compatible thin wrappers — image-loading moved to _image_cache.
+_pil_size = _image_cache.pil_size
+_cached_load = _image_cache.cached_load
 
 
-def _pil_size(path):
-    key = str(path)
-    if key in _SIZE_CACHE:
-        return _SIZE_CACHE[key]
-    with Image.open(path) as im:
-        wh = im.size
-    if len(_SIZE_CACHE) < 4096:
-        _SIZE_CACHE[key] = wh
-    return wh
-
-
-def _cached_load(matcher, path, resize=None):
-    key = (str(path), resize if not isinstance(resize, tuple) else tuple(resize))
-    cached = _IMAGE_CACHE.get(key)
-    if cached is not None:
-        return cached
-    img = matcher.load_image(path, resize=resize) if resize is not None else matcher.load_image(path)
-    if len(_IMAGE_CACHE) >= _IMAGE_CACHE_MAX:
-        _IMAGE_CACHE.pop(next(iter(_IMAGE_CACHE)))
-    _IMAGE_CACHE[key] = img
-    return img
-
-
-def reset_caches():
+def reset_caches() -> None:
     """Call between matcher runs to free memory."""
-    _IMAGE_CACHE.clear()
-    _SIZE_CACHE.clear()
+    _image_cache.reset()
 
 
 def _prepare_pair_images(matcher, im_A_path, im_B_path,
@@ -152,7 +140,7 @@ def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 
             timings.append(time.time() - t0)
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= 3:
+            if n_pair_failures <= WARN_FAILURE_LIMIT:
                 warnings.warn(
                     f"eval_pose_pairs: pair failed ({type(e).__name__}: {e}); "
                     f"skipping {im_A_path.name} <-> {im_B_path.name}",
@@ -178,12 +166,12 @@ def eval_pose_pairs(matcher, pairs, resize_long: int = 1200, ransac_runs: int = 
 
         if len(kpts0) > 0:
             epi = symmetric_epipolar_distance(kpts0, kpts1, K0s, K1s, R_gt, t_gt)
-            epipolar_precision.append(float((epi < 2.0).mean()))
+            epipolar_precision.append(float((epi < EPI_PRECISION_THRESH_PX).mean()))
         else:
             epipolar_precision.append(0.0)
 
         for _ in range(ransac_runs):
-            if len(kpts0) < 5:
+            if len(kpts0) < MIN_POSE_MATCHES:
                 tot_err_pose.append(POSE_FAIL_DEG)
                 tot_err_t.append(POSE_FAIL_DEG)
                 tot_err_R.append(POSE_FAIL_DEG)
@@ -263,7 +251,7 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
             timings.append(time.time() - t0)
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= 3:
+            if n_pair_failures <= WARN_FAILURE_LIMIT:
                 warnings.warn(
                     f"eval_homography_pairs: pair failed ({type(e).__name__}: {e}); "
                     f"skipping {im_A_path.name} <-> {im_B_path.name}",
@@ -298,7 +286,7 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
             if len(ak1):
                 ak1[:, 0] /= sx1; ak1[:, 1] /= sy1
 
-        if len(k0) >= 4:
+        if len(k0) >= MIN_HOMOG_MATCHES:
             ransac_thr = ransac_thresh_base * min(w1, h1) / HOMOG_REF_MIN_SIDE
             H_est = estimate_homography(k0, k1, ransac_thr)
         else:
@@ -357,7 +345,7 @@ def _epi_distance(F, kpts0, kpts1):
     num = np.abs((h1 * Fx0).sum(axis=1))
     n1 = np.sqrt(Fx0[:, 0] ** 2 + Fx0[:, 1] ** 2)
     n0 = np.sqrt(Ftx1[:, 0] ** 2 + Ftx1[:, 1] ** 2)
-    return num / np.maximum(n1, 1e-12) + num / np.maximum(n0, 1e-12)
+    return num / np.maximum(n1, _EPS) + num / np.maximum(n0, _EPS)
 
 
 def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
@@ -393,7 +381,7 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
             kpts1 = np.asarray(result["matched_kpts1"], dtype=np.float64).copy()
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= 3:
+            if n_pair_failures <= WARN_FAILURE_LIMIT:
                 warnings.warn(
                     f"eval_correspondence_pairs: pair failed ({type(e).__name__}: {e}); "
                     f"skipping {im_A_path.name} <-> {im_B_path.name}",
@@ -418,7 +406,7 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
         gt_resized[:, 2] *= sx1; gt_resized[:, 3] *= sy1
 
         F_pred = None
-        if len(kpts0) >= 8:
+        if len(kpts0) >= MIN_FUND_MATCHES:
             try:
                 F_pred, _ = cv2.findFundamentalMat(
                     kpts0.astype(np.float32),
@@ -495,7 +483,7 @@ def eval_fundamental_pairs(matcher, pairs, resize_long: int | None = None,
             timings.append(time.time() - t0)
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
-            if n_pair_failures <= 3:
+            if n_pair_failures <= WARN_FAILURE_LIMIT:
                 warnings.warn(
                     f"eval_fundamental_pairs: pair failed ({type(e).__name__}: {e}); "
                     f"skipping {im_A_path.name} <-> {im_B_path.name}",
@@ -557,20 +545,35 @@ def eval_fundamental_pairs(matcher, pairs, resize_long: int | None = None,
     return out
 
 
-def _matcher_describe(matcher, raw_u8: np.ndarray, kpts_xy: np.ndarray,
-                      kpt_sizes: np.ndarray | None = None):
-    """Best-effort extract descriptors at fixed kpts via cv2 feature objects.
-    Supports SIFT/RootSIFT/ORB/AKAZE/BRISK exposed as ._sift / ._orb / etc. on the matcher.
+def _resolve_cv_feature(matcher):
+    """Return the matcher's cv2 feature object via the public protocol, falling
+    back to legacy private-attr sniffing for matchers that pre-date `get_cv_feature`.
     """
-    sizes = kpt_sizes if kpt_sizes is not None else \
-            np.full(len(kpts_xy), 8.0, dtype=np.float32)
-
-    feat_obj = None
+    getter = getattr(matcher, "get_cv_feature", None)
+    if callable(getter):
+        f = getter()
+        if f is not None and hasattr(f, "compute"):
+            return f
+    # Legacy fallback — kept so external matcher subclasses don't break.
     for attr in ("_sift", "_rootsift", "_orb", "_akaze", "_brisk", "_kaze"):
         f = getattr(matcher, attr, None)
         if f is not None and hasattr(f, "compute"):
-            feat_obj = f
-            break
+            return f
+    return None
+
+
+def _matcher_describe(matcher, raw_u8: np.ndarray, kpts_xy: np.ndarray,
+                      kpt_sizes: np.ndarray | None = None):
+    """Extract descriptors at fixed kpts via the matcher's cv2 feature object.
+
+    Returns (desc, metric) where metric is 'l2' or 'hamming', or None if the
+    matcher doesn't expose a cv2 feature (caller treats as 'skipped').
+    RootSIFT-style L1-normalize + sqrt is applied when the matcher's class name
+    contains 'Root'.
+    """
+    sizes = kpt_sizes if kpt_sizes is not None else \
+            np.full(len(kpts_xy), DEFAULT_KPT_SIZE_PX, dtype=np.float32)
+    feat_obj = _resolve_cv_feature(matcher)
     if feat_obj is None:
         return None
     gray = raw_u8 if raw_u8.ndim == 2 else cv2.cvtColor(raw_u8, cv2.COLOR_RGB2GRAY)
@@ -578,16 +581,16 @@ def _matcher_describe(matcher, raw_u8: np.ndarray, kpts_xy: np.ndarray,
                for (x, y), s in zip(kpts_xy, sizes)]
     try:
         _kp_out, desc = feat_obj.compute(gray, cv_kpts)
-        if desc is None or len(desc) == 0:
-            return None
-        if "Root" in type(matcher).__name__ and desc.dtype != np.uint8:
-            d32 = desc.astype(np.float32)
-            d32 = d32 / np.maximum(d32.sum(axis=1, keepdims=True), 1e-12)
-            desc = np.sqrt(d32)
-        metric = "hamming" if desc.dtype == np.uint8 else "l2"
-        return (desc, metric)
-    except Exception:
+    except cv2.error:
         return None
+    if desc is None or len(desc) == 0:
+        return None
+    if "Root" in type(matcher).__name__ and desc.dtype != np.uint8:
+        d32 = desc.astype(np.float32)
+        d32 = d32 / np.maximum(d32.sum(axis=1, keepdims=True), _EPS)
+        desc = np.sqrt(d32)
+    metric = "hamming" if desc.dtype == np.uint8 else "l2"
+    return (desc, metric)
 
 
 def _compute_map_topk(d_a: np.ndarray, d_b: np.ndarray, metric: str = "l2") -> dict:
@@ -631,7 +634,7 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
         kpts_A = np.asarray(pair["kpts_A"], dtype=np.float32)
         kpts_B = np.asarray(pair["kpts_B"], dtype=np.float32)
         sizes_A = np.asarray(pair.get("kpt_sizes_A",
-                                       np.full(len(kpts_A), 8.0, dtype=np.float32)),
+                                       np.full(len(kpts_A), DEFAULT_KPT_SIZE_PX, dtype=np.float32)),
                               dtype=np.float32)
         subset = str(pair.get("subset") or "all")
 

@@ -51,7 +51,6 @@ def _scan_subdirs_with_list(dataset_root: Path) -> list[str]:
 
 def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
                subset_list: str = "all") -> Iterator[dict]:
-    import scipy.io as sio
     data_root = Path(data_root)
     candidates = [
         data_root,
@@ -64,6 +63,7 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
     )
     if repo_root is None:
         raise FileNotFoundError(f"MMIM tree not found under any of: {candidates}")
+    import scipy.io as sio  # noqa: PLC0415  (lazy: scipy only needed when data exists)
     dataset_root = repo_root / "Multimodal_Image_Matching_Datasets"
 
     kinds = ["medical", "remote_sensing"] if subset_list == "all" else [subset_list]

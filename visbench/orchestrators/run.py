@@ -74,26 +74,43 @@ def _qualitative_sweep(matcher, pairs, resize_long=None):
     }
 
 
+# Each entry adapts a per-task eval function to a common (matcher, pairs, **kw)
+# signature so the dispatcher is a one-line lookup and adding a new task means
+# adding a row, not a branch.
+_TASK_DISPATCH = {
+    "pose": lambda m, p, *, resize_long, ransac_runs, progress:
+        eval_pose_pairs(m, p, resize_long=resize_long,
+                        ransac_runs=ransac_runs, progress=progress),
+    "homography": lambda m, p, *, resize_long, ransac_runs, progress:
+        eval_homography_pairs(m, p, resize_long=resize_long, progress=progress),
+    "correspondence": lambda m, p, *, resize_long, ransac_runs, progress:
+        eval_correspondence_pairs(m, p, resize_long=resize_long, progress=progress),
+    "fundamental": lambda m, p, *, resize_long, ransac_runs, progress:
+        eval_fundamental_pairs(m, p, resize_long=resize_long, progress=progress),
+    "descriptor": lambda m, p, *, resize_long, ransac_runs, progress:
+        eval_descriptor_pairs(m, p, resize_long=resize_long, progress=progress),
+    "qualitative": lambda m, p, *, resize_long, ransac_runs, progress:
+        _qualitative_sweep(m, p, resize_long=resize_long),
+}
+
+
+def known_tasks() -> tuple[str, ...]:
+    """Tasks the dispatcher recognises. Mirrors `_registry.VALID_TASKS`."""
+    return tuple(_TASK_DISPATCH)
+
+
 def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs, progress):
-    if spec_task == "pose":
-        return eval_pose_pairs(matcher, pairs, resize_long=resize_long,
-                               ransac_runs=ransac_runs, progress=progress)
-    if spec_task == "homography":
-        return eval_homography_pairs(matcher, pairs, resize_long=resize_long, progress=progress)
-    if spec_task == "correspondence":
-        return eval_correspondence_pairs(matcher, pairs, resize_long=resize_long, progress=progress)
-    if spec_task == "fundamental":
-        return eval_fundamental_pairs(matcher, pairs, resize_long=resize_long, progress=progress)
-    if spec_task == "descriptor":
-        return eval_descriptor_pairs(matcher, pairs, resize_long=resize_long, progress=progress)
-    if spec_task == "qualitative":
-        return _qualitative_sweep(matcher, pairs, resize_long=resize_long)
+    fn = _TASK_DISPATCH.get(spec_task)
+    if fn is not None:
+        return fn(matcher, pairs, resize_long=resize_long,
+                  ransac_runs=ransac_runs, progress=progress)
     # Unknown / future task — degrade gracefully to a qualitative sweep so
     # any new dataset still produces SOMETHING comparable across matchers.
     import warnings
     warnings.warn(f"Unknown task '{spec_task}' — falling back to qualitative sweep "
-                  f"(speed + match-count only). Define the task in core/harness.py "
-                  f"to get full metrics.", stacklevel=2)
+                  f"(speed + match-count only). Add a dispatch entry to "
+                  f"orchestrators/run._TASK_DISPATCH to get full metrics.",
+                  stacklevel=2)
     return _qualitative_sweep(matcher, pairs, resize_long=resize_long)
 
 
