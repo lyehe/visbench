@@ -13,17 +13,27 @@ _REFERENCE_PATH = Path(__file__).resolve().parent.parent / "reference_scores.jso
 
 
 def _load_results(results_dir: Path):
+    """Read every per-cell JSON in results_dir; skip files that aren't a
+    valid record (corrupted JSON, missing method/dataset, wrong shape).
+
+    Records without `method` AND without `dataset` are silently skipped — they
+    likely came from a different tool. Records with only one of those will
+    bucket into "" (visible as an empty row in the report) so the user can
+    notice the malformed file rather than getting silent data loss.
+    """
     out = defaultdict(dict)
-    for f in results_dir.glob("*.json"):
+    for f in sorted(results_dir.glob("*.json")):
         try:
-            r = json.loads(f.read_text())
-        except Exception:
+            r = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
             continue
         if not isinstance(r, dict):
             continue
         name = (r.get("method") or r.get("matcher") or "").replace("custom:", "")
         ds = r.get("dataset", "")
-        out[name][ds] = r.get("metrics", {})
+        if not name and not ds:
+            continue
+        out[name][ds] = r.get("metrics", {}) or {}
     return out
 
 

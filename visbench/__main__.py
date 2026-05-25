@@ -58,8 +58,14 @@ def _cmd_list(args):
         else:
             for n in names:
                 print(f"  {n}")
+    elif args.kind == "tasks":
+        from .orchestrators.run import known_tasks
+        from .core.pair_schema import REQUIRED_KEYS_BY_TASK
+        for t in known_tasks():
+            keys = REQUIRED_KEYS_BY_TASK.get(t, ())
+            print(f"  {t:<16} required pair keys: {', '.join(keys)}")
     else:
-        raise SystemExit("Usage: visbench list {datasets|methods}")
+        raise SystemExit("Usage: visbench list {datasets|methods|tasks}")
 
 
 def _cmd_download(args):
@@ -216,8 +222,8 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # list
-    pl = sub.add_parser("list", help="List datasets or methods")
-    pl.add_argument("kind", choices=["datasets", "methods"])
+    pl = sub.add_parser("list", help="List datasets, methods, or tasks")
+    pl.add_argument("kind", choices=["datasets", "methods", "tasks"])
     pl.set_defaults(func=_cmd_list)
 
     # download
