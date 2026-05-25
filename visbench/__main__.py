@@ -222,38 +222,58 @@ def _build_parser() -> argparse.ArgumentParser:
 
     # download
     pd = sub.add_parser("download", help="Download / prepare a dataset")
-    pd.add_argument("name", nargs="?")
+    pd.add_argument("name", nargs="?", help="Dataset name (see `visbench list datasets`).")
     pd.add_argument("--all-auto", action="store_true",
                     help="Try every dataset's download() (skips on NotImplementedError).")
-    pd.add_argument("--data-root", default=None)
+    pd.add_argument("--data-root", default=None,
+                    help="Override the default data root (default: $VISBENCH_DATA_ROOT or ./datasets/).")
     pd.set_defaults(func=_cmd_download)
 
     # run
     pr = sub.add_parser("run", help="Run one (dataset, method) cell")
-    pr.add_argument("--dataset", required=True)
+    pr.add_argument("--dataset", required=True,
+                    help="Dataset name (see `visbench list datasets`).")
     pr.add_argument("--method", required=True,
                     help="Method name; e.g. 'sift', 'rootsift', 'vismatch:lightglue'.")
-    pr.add_argument("--data-root", default=None)
-    pr.add_argument("--data-root-default", default=None)
-    pr.add_argument("--max-pairs", type=int, default=None)
-    pr.add_argument("--resize", type=int, default=None)
-    pr.add_argument("--ransac-runs", type=int, default=5)
-    pr.add_argument("--device", default=None)
-    pr.add_argument("--out", default=None)
-    pr.add_argument("--no-progress", action="store_true")
+    pr.add_argument("--data-root", default=None,
+                    help="Override the dataset's data root entirely (skips spec.default_root).")
+    pr.add_argument("--data-root-default", default=None,
+                    help="Base directory under which dataset.default_root lives "
+                    "(default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    pr.add_argument("--max-pairs", type=int, default=None,
+                    help="Cap pairs evaluated (default: full dataset).")
+    pr.add_argument("--resize", type=int, default=None,
+                    help="Long-side resize (default: dataset's canonical value).")
+    pr.add_argument("--ransac-runs", type=int, default=5,
+                    help="Number of RANSAC shuffles for pose (default: 5).")
+    pr.add_argument("--device", default=None,
+                    help="Torch device ('cpu', 'cuda', 'cuda:0', ...). "
+                    "Default: vismatch.get_default_device() or auto.")
+    pr.add_argument("--out", default=None,
+                    help="Write per-cell JSON to this path (in addition to stdout).")
+    pr.add_argument("--no-progress", action="store_true",
+                    help="Suppress the tqdm progress bar.")
     pr.add_argument("--seed", type=int, default=0,
-                    help="RNG seed for ransac-shuffle reproducibility (default 0).")
+                    help="RNG seed for ransac-shuffle reproducibility (default 0; "
+                    "use a different int to vary shuffles).")
     pr.set_defaults(func=_cmd_run)
 
     # batch
     pb = sub.add_parser("batch", help="Run one method across many datasets in one process")
-    pb.add_argument("--method", required=True)
-    pb.add_argument("--datasets", required=True, help="Comma-separated dataset names.")
-    pb.add_argument("--out-dir", required=True)
-    pb.add_argument("--data-root-default", default=None)
-    pb.add_argument("--max-pairs", type=int, default=None)
-    pb.add_argument("--ransac-runs", type=int, default=5)
-    pb.add_argument("--device", default=None)
+    pb.add_argument("--method", required=True,
+                    help="Method name (e.g. 'sift', 'vismatch:lightglue').")
+    pb.add_argument("--datasets", required=True,
+                    help="Comma-separated dataset names.")
+    pb.add_argument("--out-dir", required=True,
+                    help="Directory to write per-cell JSON files (one per (dataset,method)).")
+    pb.add_argument("--data-root-default", default=None,
+                    help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    pb.add_argument("--max-pairs", type=int, default=None,
+                    help="Apply the same per-dataset cap (default: full datasets).")
+    pb.add_argument("--ransac-runs", type=int, default=5,
+                    help="Number of RANSAC shuffles for pose datasets (default: 5).")
+    pb.add_argument("--device", default=None,
+                    help="Torch device. Default: auto.")
     # Negative `--no-skip` kept for backward compat; `--rerun` is the modern
     # positive equivalent. Both map to the same flag value.
     pb.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
@@ -266,18 +286,25 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="Panel name ('core', 'extended') or path to a .txt of dataset names.")
     ps.add_argument("--methods", required=True,
                     help="Path to a .txt of method names (one per line).")
-    ps.add_argument("--out-dir", required=True)
-    ps.add_argument("--data-root-default", default=None)
-    ps.add_argument("--max-pairs-pose", type=int, default=None)
-    ps.add_argument("--max-pairs-homography", type=int, default=None)
-    ps.add_argument("--ransac-runs", type=int, default=5)
+    ps.add_argument("--out-dir", required=True,
+                    help="Directory to write per-cell JSON files.")
+    ps.add_argument("--data-root-default", default=None,
+                    help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    ps.add_argument("--max-pairs-pose", type=int, default=None,
+                    help="Cap pairs on pose-task datasets (default: full).")
+    ps.add_argument("--max-pairs-homography", type=int, default=None,
+                    help="Cap pairs on homography/correspondence/fundamental "
+                    "datasets (default: full).")
+    ps.add_argument("--ransac-runs", type=int, default=5,
+                    help="Number of RANSAC shuffles for pose datasets (default: 5).")
     ps.add_argument("--device", default=None,
                     help="Single device for sequential mode (ignored when --devices is set).")
     ps.add_argument("--devices", default=None,
                     help="Comma-separated device list (e.g. 'cuda:0,cuda:1,cpu') for parallel "
                     "subprocess execution; one method per device, round-robin.")
     ps.add_argument("--per-method-timeout", type=float, default=None,
-                    help="Timeout (seconds) per method subprocess in parallel mode.")
+                    help="Timeout (seconds) per method subprocess in parallel mode. "
+                    "Children are killed on timeout to avoid orphan GPU processes.")
     ps.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
                     help="Re-run cells even if their JSON already exists.")
     ps.set_defaults(func=_cmd_standard)

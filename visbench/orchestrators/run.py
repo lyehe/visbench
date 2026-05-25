@@ -51,25 +51,32 @@ def build_matcher(method: str, device: str):
     return get_method_spec(method).builder(device)
 
 
-def _qualitative_sweep(matcher, pairs, resize_long=None):
+def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
+    """Cross-matcher speed/match-count sweep used as the fallback when a
+    dataset's task isn't in `_TASK_DISPATCH`. Shares the same image cache and
+    progress conventions as the other eval_* paths."""
     import numpy as np
     from tqdm import tqdm
+    from ..core._image_cache import cached_load
     times, matches, inliers = [], [], []
-    for pair in tqdm(pairs, desc="pairs"):
-        img0 = matcher.load_image(pair["im_A_path"], resize=resize_long) if resize_long \
-               else matcher.load_image(pair["im_A_path"])
-        img1 = matcher.load_image(pair["im_B_path"], resize=resize_long) if resize_long \
-               else matcher.load_image(pair["im_B_path"])
-        t = time.time()
-        r = matcher(img0, img1)
-        times.append(time.time() - t)
-        matches.append(len(r.get("matched_kpts0", [])))
-        inliers.append(int(r.get("num_inliers", 0)))
+    n_failures = 0
+    for pair in tqdm(pairs, desc="pairs", disable=not progress):
+        try:
+            img0 = cached_load(matcher, pair["im_A_path"], resize=resize_long)
+            img1 = cached_load(matcher, pair["im_B_path"], resize=resize_long)
+            t = time.time()
+            r = matcher(img0, img1)
+            times.append(time.time() - t)
+            matches.append(len(r.get("matched_kpts0", [])))
+            inliers.append(int(r.get("num_inliers", 0)))
+        except Exception:  # noqa: BLE001
+            n_failures += 1
     return {
         "mean_time_s": float(np.mean(times)) if times else 0.0,
         "mean_matches": float(np.mean(matches)) if matches else 0.0,
         "mean_inliers": float(np.mean(inliers)) if inliers else 0.0,
         "num_pairs": len(times),
+        "num_pair_failures": n_failures,
         "resize_long": resize_long,
     }
 
@@ -90,7 +97,7 @@ _TASK_DISPATCH = {
     "descriptor": lambda m, p, *, resize_long, ransac_runs, progress, seed:
         eval_descriptor_pairs(m, p, resize_long=resize_long, progress=progress),
     "qualitative": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        _qualitative_sweep(m, p, resize_long=resize_long),
+        _qualitative_sweep(m, p, resize_long=resize_long, progress=progress),
 }
 
 
@@ -112,7 +119,7 @@ def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs,
                   f"(speed + match-count only). Add a dispatch entry to "
                   f"orchestrators/run._TASK_DISPATCH to get full metrics.",
                   stacklevel=2)
-    return _qualitative_sweep(matcher, pairs, resize_long=resize_long)
+    return _qualitative_sweep(matcher, pairs, resize_long=resize_long, progress=progress)
 
 
 def run_one(dataset: str, method: str, *, data_root_override: Path | None = None,
