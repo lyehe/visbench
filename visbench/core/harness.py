@@ -440,8 +440,14 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
         if F_pred is None or F_pred.shape != (3, 3):
             F_pred = DEGENERATE_F
 
-        errs = _epi_distance(F_pred, gt_resized[:, :2], gt_resized[:, 2:4])
-        pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
+        if len(gt_resized) == 0:
+            # No GT correspondences for this pair → PCK is undefined; report 0
+            # so per-subset aggregation stays a finite JSON number (was NaN
+            # when computing the empty-mean, breaking jq/browser consumers).
+            pck = np.zeros(len(ths_arr), dtype=np.float64)
+        else:
+            errs = _epi_distance(F_pred, gt_resized[:, :2], gt_resized[:, 2:4])
+            pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
         _append_by_subset(pck_by_subset, subset, pck)
 
     _warn_summary("eval_correspondence_pairs", len(match_counts), n_pair_failures,

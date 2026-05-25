@@ -137,7 +137,11 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
         )
 
     matcher = build_matcher(method, device=device)
-    pairs = spec.iter_pairs(data_root, max_pairs=max_pairs)
+    # Forward spec.kwargs (sevenscenes_wide vs sevenscenes, aachen_v1_1_hard,
+    # tartanair_wide, etc. all differ only by the kwargs they hand iter_pairs).
+    # Production used to drop these, silently making `_wide`/`_hard` variants
+    # identical to their base.
+    pairs = spec.iter_pairs(data_root, max_pairs=max_pairs, **(spec.kwargs or {}))
     resize_long = resize if resize is not None else spec.default_resize
 
     t0 = time.time()

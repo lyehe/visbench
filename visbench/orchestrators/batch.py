@@ -36,7 +36,7 @@ def run_batch(method: str, datasets: list[str], out_dir: Path,
             print(f"[skip] {ds}: data root missing ({data_root})", file=sys.stderr)
             continue
         mp = (max_pairs or {}).get(ds)
-        pairs = spec.iter_pairs(data_root, max_pairs=mp)
+        pairs = spec.iter_pairs(data_root, max_pairs=mp, **(spec.kwargs or {}))
         t0 = time.time()
         try:
             metrics = _evaluate(spec.task, matcher, pairs,

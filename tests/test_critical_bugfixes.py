@@ -124,3 +124,85 @@ def test_seven_scenes_K_consistent_across_modules():
     from visbench.datasets.seven_scenes import K_7SCENES as K_pair_list
     from visbench.datasets.sevenscenes_local import K_7SCENES as K_local
     np.testing.assert_array_equal(K_pair_list, K_local)
+
+
+# --- spec.kwargs threading -------------------------------------------------
+
+def test_run_one_forwards_spec_kwargs(monkeypatch, tmp_path):
+    """run_one must pass spec.kwargs to iter_pairs — otherwise _wide and _hard
+    variants silently match their base variant's output."""
+    from pathlib import Path
+    from visbench.datasets._registry import DatasetSpec, register, _REGISTRY
+    from visbench.orchestrators.run import run_one
+
+    seen_kwargs: dict = {}
+
+    def fake_iter(data_root, max_pairs=None, **kw):
+        seen_kwargs.update(kw)
+        return iter([])
+
+    spec = DatasetSpec(
+        task="qualitative", iter_pairs=fake_iter,
+        default_root=Path("dummy"), source_url="x",
+        kwargs={"my_test_flag": "expected_value"},
+    )
+    monkeypatch.setenv("VISBENCH_ALLOW_REREGISTER", "1")
+    register("__test_kwargs_dataset", spec)
+
+    # Make data_root.exists() pass
+    (tmp_path / "dummy").mkdir()
+    try:
+        run_one(
+            dataset="__test_kwargs_dataset", method="sift",
+            data_root_default=tmp_path,
+            max_pairs=1, ransac_runs=1, device="cpu", progress=False,
+        )
+    except Exception:
+        # Real evaluation may fail (no images); we only care kwargs forwarded.
+        pass
+    assert seen_kwargs.get("my_test_flag") == "expected_value", \
+        f"spec.kwargs not forwarded to iter_pairs: {seen_kwargs}"
+    _REGISTRY.pop("__test_kwargs_dataset", None)
+
+
+# --- correspondence: zero-GT pair → finite PCK -----------------------------
+
+def test_eval_correspondence_zero_gt_returns_finite():
+    """A pair with empty `corrs` (no GT correspondences) used to mean(empty),
+    producing NaN that contaminated the per-subset aggregate and broke
+    downstream JSON parsing (NaN is not valid JSON)."""
+    import json
+    import warnings
+    from visbench.core.harness import eval_correspondence_pairs
+
+    class StubMatcher:
+        def load_image(self, p, resize=None):
+            return None
+
+        def __call__(self, img0, img1):
+            return {"matched_kpts0": np.zeros((0, 2)),
+                    "matched_kpts1": np.zeros((0, 2)),
+                    "all_kpts0": np.zeros((0, 2)),
+                    "all_kpts1": np.zeros((0, 2)),
+                    "num_inliers": 0}
+
+    from PIL import Image
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        from pathlib import Path
+        p_a = Path(td) / "a.png"; Image.new("RGB", (32, 32)).save(p_a)
+        p_b = Path(td) / "b.png"; Image.new("RGB", (32, 32)).save(p_b)
+        pair = {
+            "im_A_path": str(p_a),
+            "im_B_path": str(p_b),
+            "corrs": np.zeros((0, 4)),  # ← zero GT correspondences
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            res = eval_correspondence_pairs(StubMatcher(), [pair], progress=False)
+    # Must be JSON-serialisable (no NaN literals)
+    blob = json.dumps(res, allow_nan=False)
+    assert "NaN" not in blob
+    for k, v in res.items():
+        if isinstance(v, float):
+            assert not (v != v), f"NaN leaked into {k}={v}"
