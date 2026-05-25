@@ -63,22 +63,35 @@ def _identical_pair():
     }]
 
 
-def test_dispatch_unknown_task_falls_back_to_qualitative(monkeypatch):
+def _identical_pair_with_real_image(tmp_path):
+    """Like _identical_pair() but writes an actual image file so PIL.Image.open
+    succeeds — needed since _qualitative_sweep now goes through the same
+    aspect-preserving resize as the other eval_* paths."""
+    from PIL import Image
+    import numpy as np
+    p = tmp_path / "stub.png"
+    Image.new("RGB", (32, 32)).save(p)
+    pair = dict(_identical_pair()[0])
+    pair["im_A_path"] = str(p)
+    pair["im_B_path"] = str(p)
+    return [pair]
+
+
+def test_dispatch_unknown_task_falls_back_to_qualitative(tmp_path):
     """An unrecognised task degrades gracefully to a qualitative sweep."""
     matcher = StubMatcher()
-    # _qualitative_sweep reads pair["im_A_path"] via matcher.load_image; our
-    # StubMatcher returns dummy tensors so we don't need real files.
-    res = _evaluate("not_a_real_task", matcher, _identical_pair(),
-                    resize_long=64, ransac_runs=1, progress=False)
-    # Qualitative sweep keys
+    res = _evaluate("not_a_real_task", matcher,
+                    _identical_pair_with_real_image(tmp_path),
+                    resize_long=64, ransac_runs=1, progress=False, seed=0)
     for k in ("mean_time_s", "mean_matches", "num_pairs"):
         assert k in res
     json.dumps(res)  # must be JSON-serialisable
 
 
-def test_qualitative_returns_serializable_dict():
+def test_qualitative_returns_serializable_dict(tmp_path):
     matcher = StubMatcher()
-    res = _qualitative_sweep(matcher, _identical_pair(), resize_long=32)
+    res = _qualitative_sweep(matcher, _identical_pair_with_real_image(tmp_path),
+                             resize_long=32)
     json.dumps(res)
     assert res["num_pairs"] == 1
 

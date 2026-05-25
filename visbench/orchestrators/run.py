@@ -53,17 +53,22 @@ def build_matcher(method: str, device: str):
 
 def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
     """Cross-matcher speed/match-count sweep used as the fallback when a
-    dataset's task isn't in `_TASK_DISPATCH`. Shares the same image cache and
-    progress conventions as the other eval_* paths."""
+    dataset's task isn't in `_TASK_DISPATCH`. Shares the same image cache,
+    aspect-preserving long-side resize, and progress conventions as the other
+    eval_* paths (matters: vismatch's load_image treats a bare int as a
+    SQUARE resize, which would distort non-square inputs).
+    """
     import numpy as np
     from tqdm import tqdm
-    from ..core._image_cache import cached_load
+    from ..core.harness import _prepare_pair_images
     times, matches, inliers = [], [], []
     n_failures = 0
     for pair in tqdm(pairs, desc="pairs", disable=not progress):
         try:
-            img0 = cached_load(matcher, pair["im_A_path"], resize=resize_long)
-            img1 = cached_load(matcher, pair["im_B_path"], resize=resize_long)
+            img0, img1, *_ = _prepare_pair_images(
+                matcher, pair["im_A_path"], pair["im_B_path"],
+                resize_long=resize_long,
+            )
             t = time.time()
             r = matcher(img0, img1)
             times.append(time.time() - t)
