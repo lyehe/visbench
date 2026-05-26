@@ -54,13 +54,15 @@ def build_matcher(method: str, device: str):
 def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
     """Cross-matcher speed/match-count sweep used as the fallback when a
     dataset's task isn't in `_TASK_DISPATCH`. Shares the same image cache,
-    aspect-preserving long-side resize, and progress conventions as the other
-    eval_* paths (matters: vismatch's load_image treats a bare int as a
-    SQUARE resize, which would distort non-square inputs).
+    aspect-preserving long-side resize, progress and per-pair-failure
+    warning conventions as the other eval_* paths (matters: vismatch's
+    load_image treats a bare int as a SQUARE resize, which would distort
+    non-square inputs).
     """
     import numpy as np
+    from pathlib import Path
     from tqdm import tqdm
-    from ..core.harness import _prepare_pair_images
+    from ..core.harness import _prepare_pair_images, _warn_pair_failure, _warn_summary
     times, matches, inliers = [], [], []
     n_failures = 0
     for pair in tqdm(pairs, desc="pairs", disable=not progress):
@@ -74,8 +76,14 @@ def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
             times.append(time.time() - t)
             matches.append(len(r.get("matched_kpts0", [])))
             inliers.append(int(r.get("num_inliers", 0)))
-        except Exception:  # noqa: BLE001
+        except Exception as e:  # noqa: BLE001
             n_failures += 1
+            _warn_pair_failure("_qualitative_sweep",
+                               Path(pair.get("im_A_path", "?")),
+                               Path(pair.get("im_B_path", "?")),
+                               e, n_failures)
+    _warn_summary("_qualitative_sweep", len(times), n_failures,
+                  "excluded from the qualitative aggregate.")
     return {
         "mean_time_s": float(np.mean(times)) if times else 0.0,
         "mean_matches": float(np.mean(matches)) if matches else 0.0,

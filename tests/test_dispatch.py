@@ -96,6 +96,25 @@ def test_qualitative_returns_serializable_dict(tmp_path):
     assert res["num_pairs"] == 1
 
 
+def test_qualitative_warns_on_pair_failure(tmp_path):
+    """Regression: _qualitative_sweep used to silently swallow per-pair
+    exceptions; now it emits the same UserWarning the eval_*_pairs paths do."""
+    import warnings
+
+    class CrashingMatcher(StubMatcher):
+        def __call__(self, img0, img1):
+            raise RuntimeError("simulated matcher crash")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        res = _qualitative_sweep(CrashingMatcher(),
+                                 _identical_pair_with_real_image(tmp_path),
+                                 resize_long=32)
+    assert res["num_pair_failures"] == 1
+    assert any("_qualitative_sweep" in str(w.message) for w in caught), \
+        f"expected per-pair warning, got: {[str(w.message) for w in caught]}"
+
+
 def test_eval_fundamental_pairs_handles_empty_iter():
     """No pairs → returns dict (no crash). Validates the function signature."""
     import warnings
