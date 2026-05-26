@@ -96,6 +96,20 @@ def test_qualitative_returns_serializable_dict(tmp_path):
     assert res["num_pairs"] == 1
 
 
+def test_dispatch_forwards_only_accepted_kwargs(tmp_path):
+    """_evaluate filters kwargs by each eval fn's signature, so non-pose
+    tasks don't get spammed with seed/ransac_runs (was previously hidden
+    by 6 identical wrapper lambdas)."""
+    from visbench.orchestrators.run import _TASK_DISPATCH, _accepted_kwargs
+    # Pose accepts seed + ransac_runs; homography accepts neither.
+    pose_kw = _accepted_kwargs(_TASK_DISPATCH["pose"])
+    homog_kw = _accepted_kwargs(_TASK_DISPATCH["homography"])
+    assert "seed" in pose_kw
+    assert "ransac_runs" in pose_kw
+    assert "seed" not in homog_kw
+    assert "ransac_runs" not in homog_kw
+
+
 def test_qualitative_warns_on_pair_failure(tmp_path):
     """Regression: _qualitative_sweep used to silently swallow per-pair
     exceptions; now it emits the same UserWarning the eval_*_pairs paths do."""

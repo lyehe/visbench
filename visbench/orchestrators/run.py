@@ -94,24 +94,27 @@ def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
     }
 
 
-# Each entry adapts a per-task eval function to a common (matcher, pairs, **kw)
-# signature so the dispatcher is a one-line lookup and adding a new task means
-# adding a row, not a branch.
+# Each entry is the bare eval function for the task; `_evaluate` filters the
+# caller's kwargs against each function's signature so we don't have to repeat
+# the same lambda wrapper just to drop `seed`/`ransac_runs` for tasks that
+# don't use them (only `pose` consumes `seed` and `ransac_runs` right now).
 _TASK_DISPATCH = {
-    "pose": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        eval_pose_pairs(m, p, resize_long=resize_long,
-                        ransac_runs=ransac_runs, progress=progress, seed=seed),
-    "homography": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        eval_homography_pairs(m, p, resize_long=resize_long, progress=progress),
-    "correspondence": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        eval_correspondence_pairs(m, p, resize_long=resize_long, progress=progress),
-    "fundamental": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        eval_fundamental_pairs(m, p, resize_long=resize_long, progress=progress),
-    "descriptor": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        eval_descriptor_pairs(m, p, resize_long=resize_long, progress=progress),
-    "qualitative": lambda m, p, *, resize_long, ransac_runs, progress, seed:
-        _qualitative_sweep(m, p, resize_long=resize_long, progress=progress),
+    "pose": eval_pose_pairs,
+    "homography": eval_homography_pairs,
+    "correspondence": eval_correspondence_pairs,
+    "fundamental": eval_fundamental_pairs,
+    "descriptor": eval_descriptor_pairs,
+    "qualitative": _qualitative_sweep,
 }
+
+
+def _accepted_kwargs(fn) -> set[str]:
+    import inspect
+    sig = inspect.signature(fn)
+    if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+        # Function takes **kwargs — accept everything.
+        return None  # type: ignore[return-value]
+    return set(sig.parameters)
 
 
 def known_tasks() -> tuple[str, ...]:
@@ -145,17 +148,25 @@ _check_dispatch_matches_tasks()
 def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs,
               progress, seed: int | None = 0):
     fn = _TASK_DISPATCH.get(spec_task)
-    if fn is not None:
-        return fn(matcher, pairs, resize_long=resize_long,
-                  ransac_runs=ransac_runs, progress=progress, seed=seed)
-    # Unknown / future task — degrade gracefully to a qualitative sweep so
-    # any new dataset still produces SOMETHING comparable across matchers.
-    import warnings
-    warnings.warn(f"Unknown task '{spec_task}' — falling back to qualitative sweep "
-                  f"(speed + match-count only). Add a dispatch entry to "
-                  f"orchestrators/run._TASK_DISPATCH to get full metrics.",
-                  stacklevel=2)
-    return _qualitative_sweep(matcher, pairs, resize_long=resize_long, progress=progress)
+    if fn is None:
+        # Unknown / future task — degrade gracefully to a qualitative sweep so
+        # any new dataset still produces SOMETHING comparable across matchers.
+        import warnings
+        warnings.warn(f"Unknown task '{spec_task}' — falling back to qualitative sweep "
+                      f"(speed + match-count only). Add a dispatch entry to "
+                      f"orchestrators/run._TASK_DISPATCH to get full metrics.",
+                      stacklevel=2)
+        fn = _qualitative_sweep
+    candidate_kwargs = {
+        "resize_long": resize_long,
+        "ransac_runs": ransac_runs,
+        "progress": progress,
+        "seed": seed,
+    }
+    accepted = _accepted_kwargs(fn)
+    kwargs = (candidate_kwargs if accepted is None
+              else {k: v for k, v in candidate_kwargs.items() if k in accepted})
+    return fn(matcher, pairs, **kwargs)
 
 
 def run_one(dataset: str, method: str, *, data_root_override: Path | None = None,
