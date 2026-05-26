@@ -9,8 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-VALID_TASKS = {"pose", "homography", "correspondence", "descriptor",
-               "fundamental", "qualitative"}
+# VALID_TASKS aliases the canonical set in `visbench._tasks` so the dataset
+# registry and the orchestrator's `_TASK_DISPATCH` never drift.
+from .._tasks import TASKS as VALID_TASKS  # noqa: E402  (intentional)
 
 
 @dataclass

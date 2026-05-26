@@ -107,8 +107,31 @@ _TASK_DISPATCH = {
 
 
 def known_tasks() -> tuple[str, ...]:
-    """Tasks the dispatcher recognises. Mirrors `_registry.VALID_TASKS`."""
+    """Tasks the dispatcher recognises. Sourced from `visbench._tasks.TASKS`
+    so the orchestrator and the dataset registry can't drift; a drift check
+    runs once at module import (see below)."""
     return tuple(_TASK_DISPATCH)
+
+
+def _check_dispatch_matches_tasks() -> None:
+    """One-time sanity check that _TASK_DISPATCH and visbench._tasks.TASKS
+    agree. Runs at module import; raises immediately if a task was added to
+    one without the other so the bug surfaces at startup, not at eval time.
+    """
+    from .._tasks import TASKS
+    dispatch_keys = frozenset(_TASK_DISPATCH)
+    if dispatch_keys != TASKS:
+        only_dispatch = dispatch_keys - TASKS
+        only_tasks = TASKS - dispatch_keys
+        raise RuntimeError(
+            f"_TASK_DISPATCH and visbench._tasks.TASKS have drifted. "
+            f"Only in _TASK_DISPATCH: {sorted(only_dispatch)}. "
+            f"Only in TASKS: {sorted(only_tasks)}. "
+            f"Add the missing task to the other location."
+        )
+
+
+_check_dispatch_matches_tasks()
 
 
 def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs,

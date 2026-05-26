@@ -54,6 +54,17 @@ def test_method_builder_var_kw_accepted():
     register_m("__varkw_builder", varkw_builder)
 
 
+def test_task_dispatch_and_valid_tasks_agree():
+    """Regression: VALID_TASKS and _TASK_DISPATCH must stay in sync. Adding a
+    task to one without the other previously caused register() to accept the
+    spec at startup while every cell silently fell to the qualitative fallback
+    at eval time."""
+    from visbench._tasks import TASKS
+    from visbench.orchestrators.run import _TASK_DISPATCH
+    from visbench.datasets._registry import VALID_TASKS
+    assert frozenset(_TASK_DISPATCH) == TASKS == VALID_TASKS
+
+
 def test_dataset_get_typo_includes_dataset_count():
     from visbench.datasets import get
     with pytest.raises(KeyError) as exc:
