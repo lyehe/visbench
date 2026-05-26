@@ -13,7 +13,8 @@ import cv2
 import numpy as np
 
 from ._registry import DatasetSpec, register
-from .synthetic import _make_iter, download as _download_hpatches
+from ._synthetic_common import make_iter as _make_iter
+from .synthetic import download as _download_hpatches
 
 
 def download(data_root: Path | str) -> Path:

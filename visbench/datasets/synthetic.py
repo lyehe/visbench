@@ -11,100 +11,32 @@ License: inherits HPatches (CC BY-NC-SA 4.0).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable
 
 import cv2
 import numpy as np
 
 from ._registry import DatasetSpec, register
-from .hpatches import DEGENERATE, download as _download_hpatches
+from ._synthetic_common import (
+    base_pairs,
+    gauss_blur,
+    gauss_noise,
+    jpeg,
+    make_iter,
+)
+from .hpatches import download as _download_hpatches
+
+# Legacy underscore aliases — external code that imported from this module
+# (e.g. synthetic_compound previously did `from .synthetic import _jpeg`)
+# continues to work, but new code should import from `_synthetic_common`.
+_base_pairs = base_pairs
+_make_iter = make_iter
+_jpeg = jpeg
+_gauss_noise = gauss_noise
+_gauss_blur = gauss_blur
 
 
 def download(data_root: Path | str) -> Path:
     return _download_hpatches(data_root)
-
-
-def _base_pairs(data_root: Path, max_pairs: int | None):
-    data_root = Path(data_root)
-    seq_root = data_root / "hpatches-sequences-release"
-    if not seq_root.exists():
-        seq_root = data_root
-    count = 0
-    for seq in sorted(seq_root.iterdir()):
-        if not seq.is_dir() or seq.name in DEGENERATE:
-            continue
-        if not (seq.name.startswith("i_") or seq.name.startswith("v_")):
-            continue
-        subset_type = "illum" if seq.name.startswith("i_") else "view"
-        im1 = seq / "1.ppm"
-        if not im1.exists():
-            continue
-        for k in range(2, 7):
-            imk = seq / f"{k}.ppm"
-            Hk = seq / f"H_1_{k}"
-            if not (imk.exists() and Hk.exists()):
-                continue
-            yield {
-                "im_A_path": str(im1),
-                "im_B_path": str(imk),
-                "H_gt": np.loadtxt(Hk),
-                "subset": subset_type,
-                "seq": seq.name,
-                "pair_idx": k,
-            }
-            count += 1
-            if max_pairs is not None and count >= max_pairs:
-                return
-
-
-def _make_iter(pert_name: str, fn: Callable[[np.ndarray], np.ndarray],
-               composes_H: bool = False,
-               scale_xy: tuple[float, float] | None = None) -> Callable:
-    def iter_pairs(data_root, max_pairs=None, **_):
-        data_root = Path(data_root)
-        cache_dir = data_root / f"_synthetic_{pert_name}"
-        cache_dir.mkdir(exist_ok=True)
-        for pair in _base_pairs(data_root, max_pairs):
-            im_B = Path(pair["im_B_path"])
-            out_dir = cache_dir / pair["seq"]
-            out_dir.mkdir(exist_ok=True)
-            out_path = out_dir / f"{pair['pair_idx']}.png"
-            if not out_path.exists():
-                arr = cv2.imread(str(im_B), cv2.IMREAD_COLOR)
-                warped = fn(arr)
-                cv2.imwrite(str(out_path), warped)
-            H_gt = pair["H_gt"].copy()
-            if scale_xy is not None:
-                sx, sy = scale_xy
-                S = np.diag([sx, sy, 1.0])
-                H_gt = S @ H_gt
-            yield {
-                **pair,
-                "im_B_path": str(out_path),
-                "H_gt": H_gt,
-                "subset": f"{pair['subset']}_{pert_name}",
-            }
-    return iter_pairs
-
-
-def _jpeg(q: int):
-    def f(arr):
-        _, enc = cv2.imencode(".jpg", arr, [int(cv2.IMWRITE_JPEG_QUALITY), q])
-        return cv2.imdecode(enc, cv2.IMREAD_COLOR)
-    return f
-
-
-def _gauss_noise(sigma: float):
-    def f(arr):
-        noise = np.random.default_rng(0).normal(0, sigma, arr.shape).astype(np.float32)
-        return np.clip(arr.astype(np.float32) + noise, 0, 255).astype(np.uint8)
-    return f
-
-
-def _gauss_blur(ksize: int):
-    def f(arr):
-        return cv2.GaussianBlur(arr, (ksize, ksize), 0)
-    return f
 
 
 def _gamma(g: float):
