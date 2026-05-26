@@ -4,6 +4,7 @@ import cv2
 import numpy as np
 
 from ._auc import auc_at_thresholds
+from ._constants import MIN_POSE_MATCHES, POSE_RANSAC_CONF
 
 
 def angle_error_mat(R1: np.ndarray, R2: np.ndarray) -> float:
@@ -33,8 +34,8 @@ def compute_pose_error(R_est: np.ndarray, t_est: np.ndarray, R_gt: np.ndarray, t
 
 
 def estimate_pose_essential(kpts0: np.ndarray, kpts1: np.ndarray, K0: np.ndarray, K1: np.ndarray,
-                            norm_thresh: float, conf: float = 0.99999):
-    if len(kpts0) < 5:
+                            norm_thresh: float, conf: float = POSE_RANSAC_CONF):
+    if len(kpts0) < MIN_POSE_MATCHES:
         return None
     K0inv = np.linalg.inv(K0[:2, :2])
     K1inv = np.linalg.inv(K1[:2, :2])

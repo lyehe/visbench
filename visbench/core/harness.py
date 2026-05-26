@@ -10,6 +10,14 @@ import numpy as np
 from tqdm import tqdm
 
 from . import _image_cache
+from .metrics._constants import (
+    FUND_RANSAC_CONF,
+    FUND_RANSAC_MAX_ITERS,
+    MIN_FUND_MATCHES,
+    MIN_HOMOG_MATCHES,
+    MIN_POSE_MATCHES,
+    POSE_FAIL_DEG,
+)
 from .metrics.pose import (
     compute_pose_error,
     estimate_pose_essential,
@@ -33,18 +41,11 @@ POSE_RANSAC_PX = float(os.environ.get("VISBENCH_POSE_RANSAC_PX", 0.5))
 HOMOG_RANSAC_PX_BASE = float(os.environ.get("VISBENCH_HOMOG_RANSAC_PX_BASE", 3.0))
 HOMOG_REF_MIN_SIDE = 480.0  # HPatches-canonical threshold-scaling reference.
 FUND_RANSAC_PX = float(os.environ.get("VISBENCH_FUND_RANSAC_PX", 0.5))
-FUND_RANSAC_CONF = 0.999
-FUND_RANSAC_MAX_ITERS = 100_000
 
-# Fallback metric values used when a pair / matcher / RANSAC fails. Centralised
-# here so the value is consistent across all eval_* functions and tests.
-POSE_FAIL_DEG = 90.0
+# Per-pair eval defaults.
 DEFAULT_KPT_SIZE_PX = 8.0
 EPI_PRECISION_THRESH_PX = 2.0
 WARN_FAILURE_LIMIT = 3  # Stop spamming after this many per-pair failure warnings.
-MIN_POSE_MATCHES = 5     # cv2.findEssentialMat minimum for 5-point algorithm.
-MIN_FUND_MATCHES = 8     # cv2.findFundamentalMat minimum for 8-point algorithm.
-MIN_HOMOG_MATCHES = 4    # cv2.findHomography minimum.
 
 # Numerical floor used wherever we divide by a possibly-tiny norm.
 _EPS = 1e-12
