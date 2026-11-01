@@ -37,6 +37,8 @@ from .._registry import DatasetSpec, register
 _REPO = "https://github.com/georg-bn/satast"
 _ARCHIVE = "https://github.com/georg-bn/satast/archive/refs/heads/main.zip"
 _ANNOTATIONS = "annotations-v1"
+_FILE_LIST = "included_images.txt"
+_RSYNC_SOURCE = "rsync://vandaldata.polito.it/sf_xl/EarthMatch/data"
 
 
 def _images_present(root: Path) -> bool:
@@ -59,12 +61,17 @@ def download(data_root: Path | str) -> Path:
         if archive.exists():
             archive.unlink()
     if not _images_present(data_root):
-        if shutil.which("rsync") is None or not (data_root / "download_images.sh").exists():
+        rsync = shutil.which("rsync")
+        if rsync is None or not (data_root / _FILE_LIST).exists():
             raise NotImplementedError(
                 "SatAst: the images are served only over rsync (no registration).\n"
-                f"Install rsync, then run `bash download_images.sh` inside {data_root}."
+                "Install rsync and put it on PATH, then rerun `visbench download satast`."
             )
-        subprocess.run(["bash", "download_images.sh"], cwd=str(data_root), check=True)
+        # Same call as the repository's download_images.sh, run directly: on
+        # Windows a bare `bash` can resolve to the WSL launcher.
+        subprocess.run([rsync, "-rhz", "--info=progress2", "--ignore-existing",
+                        f"--files-from={_FILE_LIST}", _RSYNC_SOURCE, "./data"],
+                       cwd=str(data_root), check=True)
     return data_root
 
 
