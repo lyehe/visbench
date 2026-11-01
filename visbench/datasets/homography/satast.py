@@ -24,6 +24,7 @@ License: images per AIMS / EarthMatch; annotations per repository.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -87,7 +88,11 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None) -> Iterator[
         im_A = data_root / Path(d["query_path"].replace("\\", "/"))
         im_B = data_root / Path(d["pred_path"].replace("\\", "/"))
         if not (im_A.exists() and im_B.exists()):
-            raise FileNotFoundError(f"SatAst image missing for {ann.name}; run download_images.sh in {data_root}.")
+            longest = max(len(str(im_A.resolve())), len(str(im_B.resolve())))
+            hint = (f" The path is {longest} characters; Windows' 260-character limit hides it."
+                    " Move the data to a shorter root or enable long paths."
+                    if os.name == "nt" and longest >= 260 else "")
+            raise FileNotFoundError(f"SatAst image missing for {ann.name} under {data_root}.{hint}")
         yield {
             "im_A_path": str(im_A),
             "im_B_path": str(im_B),
