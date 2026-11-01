@@ -28,7 +28,8 @@ import numpy as np
 
 from ..core.metrics.pose import compute_relative_pose
 from ._registry import DatasetSpec, register
-from ._download import download_url, extract_archive
+from ._rotation import rotate_camera, rotated_image
+
 
 # Public mirror used by LoFTR/ASpan/RoMa benchmark scripts.
 _TARBALL_URL = "https://drive.google.com/uc?id=1Mx2WTL0ULePz9N5skOQXrYxuaG2W3hOE"
@@ -55,7 +56,7 @@ def download(data_root: Path | str) -> Path:
 
 
 def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
-               scene_files=SCENE_FILES) -> Iterator[dict]:
+               scene_files=SCENE_FILES, rotate_b: bool = False) -> Iterator[dict]:
     data_root = Path(data_root)
     count = 0
     for scene_file in scene_files:
@@ -74,9 +75,13 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
             T1 = poses[idx1]
             T2 = poses[idx2]
             R, t = compute_relative_pose(T1[:3, :3], T1[:3, 3], T2[:3, :3], T2[:3, 3])
+            im_B = data_root / im_paths[idx2]
+            if rotate_b:
+                im_B, W, _ = rotated_image(im_B, data_root / "_cache_rot90", Path(im_paths[idx2]))
+                K1, R, t = rotate_camera(K1, R, t, W)
             yield {
                 "im_A_path": str(data_root / im_paths[idx1]),
-                "im_B_path": str(data_root / im_paths[idx2]),
+                "im_B_path": str(im_B),
                 "K0": K0,
                 "K1": K1,
                 "R_0to1": R,
@@ -93,6 +98,16 @@ register("megadepth1500", DatasetSpec(
     iter_pairs=iter_pairs,
     default_root=Path("megadepth"),
     default_resize=1200,
+    download=download,
+    source_url="https://github.com/zju3dv/LoFTR",
+    license="Apache 2.0 (LoFTR); MegaDepth images per source",
+))
+register("megadepth1500_rot90", DatasetSpec(
+    task="pose",
+    iter_pairs=iter_pairs,
+    default_root=Path("megadepth"),
+    default_resize=1200,
+    kwargs={"rotate_b": True},
     download=download,
     source_url="https://github.com/zju3dv/LoFTR",
     license="Apache 2.0 (LoFTR); MegaDepth images per source",

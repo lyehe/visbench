@@ -110,10 +110,8 @@ _KW = dict(
     license="Academic",
 )
 
-# Match aachen_pairs.py default_root so users who prepare data under either
-# CLI name land in the same directory tree (the upstream archive name is
-# `aachen_v1_1.zip` which extracts to `aachen_v1_1/`; the dot-form is a
-# stylistic choice but must be consistent across the two modules).
+# Both variants share one data tree; they differ only in the co-visibility
+# threshold used to form pairs.
 _AACHEN_ROOT = Path("aachen_v1.1")
 register("aachen_v1_1", DatasetSpec("pose", iter_pairs, _AACHEN_ROOT,
                                     default_resize=1024, kwargs={"min_shared": 100}, **_KW))

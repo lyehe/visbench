@@ -10,6 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from . import _image_cache
+from .imageio import imread
 from .sampling import EmptyPairsError  # noqa: F401  (re-exported)
 from .metrics._constants import (
     FUND_RANSAC_CONF,
@@ -24,6 +25,7 @@ from .metrics.pose import (
     estimate_pose_essential,
     pose_auc,
 )
+from .metrics._auc import auc_at_thresholds
 from .metrics.homography import (
     estimate_homography,
     homography_corner_error,
@@ -42,6 +44,8 @@ POSE_RANSAC_PX = float(os.environ.get("VISBENCH_POSE_RANSAC_PX", 0.5))
 HOMOG_RANSAC_PX_BASE = float(os.environ.get("VISBENCH_HOMOG_RANSAC_PX_BASE", 3.0))
 HOMOG_REF_MIN_SIDE = 480.0  # HPatches-canonical threshold-scaling reference.
 FUND_RANSAC_PX = float(os.environ.get("VISBENCH_FUND_RANSAC_PX", 0.5))
+# WxBS / HardMatch reference evaluators fit F with MAGSAC at 0.25 px.
+CORR_RANSAC_PX = float(os.environ.get("VISBENCH_CORR_RANSAC_PX", 0.25))
 
 # Per-pair eval defaults.
 DEFAULT_KPT_SIZE_PX = 8.0
@@ -94,7 +98,7 @@ def _append_by_subset(buckets: dict, subset: str, value) -> None:
     """Append `value` to buckets[subset] and (if subset != 'all') also to
     buckets['all']. Centralises the per-subset+overall aggregation idiom and
     avoids the double-append bug when subset itself is 'all' (which previously
-    inflated num_pairs to 2x for datasets like evd that don't set a subset)."""
+    inflated num_pairs to 2x for datasets that don't set a subset)."""
     buckets.setdefault(subset, []).append(value)
     if subset != "all":
         buckets.setdefault("all", []).append(value)
@@ -367,6 +371,98 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
     return out
 
 
+def _to_normalized(pts: np.ndarray, w: int, h: int, offset: float = 0.5) -> np.ndarray:
+    """Pixel-index coordinates -> [-1, 1] (pixel centres at +offset), as in RoMa v2's SatAst."""
+    out = np.empty_like(pts, dtype=np.float64)
+    out[:, 0] = 2.0 * (pts[:, 0] + offset) / w - 1.0
+    out[:, 1] = 2.0 * (pts[:, 1] + offset) / h - 1.0
+    return out
+
+
+def _to_pixel(pts: np.ndarray, w: int, h: int, offset: float = 0.5) -> np.ndarray:
+    out = np.empty_like(pts, dtype=np.float64)
+    out[:, 0] = w * (pts[:, 0] + 1.0) / 2.0 - offset
+    out[:, 1] = h * (pts[:, 1] + 1.0) / 2.0 - offset
+    return out
+
+
+POINT_HOMOG_NORM_THRESH = 0.001     # RANSAC threshold in normalized [-1, 1] units
+POINT_HOMOG_THRESHOLDS = tuple(range(1, 31))
+
+
+def eval_point_homography_pairs(matcher, pairs, resize_long: int | None = None,
+                                progress: bool = True):
+    """`pairs` yields {im_A_path, im_B_path, pts_A, pts_B} (annotated pixels, original images).
+
+    SatAst reference protocol (RoMa v2, ``romav2/benchmarks/satast.py``): fit a
+    homography to the matches in normalized coordinates (USAC_DEFAULT, 0.001,
+    confidence 0.99999999, 100k iterations), map every annotated A point into
+    B, and pool the reprojection errors of all points over all pairs. A pair
+    whose fit fails contributes infinite error for each of its points. Reports
+    AUC of the pooled errors at 5/10/20/30 px (headline: AUC@10px).
+    """
+    errors: list[float] = []
+    timings, match_counts = [], []
+    n_pair_failures = 0
+    n_consumed = 0
+    for pair in tqdm(pairs, desc="pairs", disable=not progress):
+        n_consumed += 1
+        im_A_path = Path(pair["im_A_path"])
+        im_B_path = Path(pair["im_B_path"])
+        pts_A = np.asarray(pair["pts_A"], dtype=np.float64).reshape(-1, 2)
+        pts_B = np.asarray(pair["pts_B"], dtype=np.float64).reshape(-1, 2)
+        if len(pts_A) == 0:
+            continue
+        try:
+            (img0, img1, (w0, h0), (w1, h1), _, _,
+             (sx0, sy0), (sx1, sy1)) = _prepare_pair_images(
+                matcher, im_A_path, im_B_path, resize_long=resize_long,
+            )
+            t0 = time.time()
+            result = matcher(img0, img1)
+            timings.append(time.time() - t0)
+            k0 = np.asarray(result["matched_kpts0"], dtype=np.float64).reshape(-1, 2).copy()
+            k1 = np.asarray(result["matched_kpts1"], dtype=np.float64).reshape(-1, 2).copy()
+        except Exception as e:  # noqa: BLE001
+            n_pair_failures += 1
+            _warn_pair_failure("eval_point_homography_pairs", im_A_path, im_B_path, e, n_pair_failures)
+            errors.extend([float("inf")] * len(pts_A))
+            match_counts.append(0)
+            continue
+        match_counts.append(len(k0))
+        k0[:, 0] /= sx0; k0[:, 1] /= sy0
+        k1[:, 0] /= sx1; k1[:, 1] /= sy1
+        H = None
+        if len(k0) >= MIN_HOMOG_MATCHES:
+            try:
+                H, _ = cv2.findHomography(
+                    _to_normalized(k0, w0, h0), _to_normalized(k1, w1, h1),
+                    method=cv2.USAC_DEFAULT, ransacReprojThreshold=POINT_HOMOG_NORM_THRESH,
+                    confidence=0.99999999, maxIters=100_000,
+                )
+            except cv2.error:
+                H = None
+        if H is None:
+            errors.extend([float("inf")] * len(pts_A))
+            continue
+        src = np.c_[_to_normalized(pts_A, w0, h0), np.ones(len(pts_A))] @ H.T
+        warped = _to_pixel(src[:, :2] / (src[:, 2:3] + 1e-8), w1, h1)
+        errors.extend(np.linalg.norm(warped - pts_B, axis=1).tolist())
+
+    _warn_summary("eval_point_homography_pairs", n_consumed, n_pair_failures,
+                  "their points count as infinite error.")
+    aucs = auc_at_thresholds(np.asarray(errors), list(POINT_HOMOG_THRESHOLDS))
+    return {
+        **{f"auc_{t}px": aucs[t - 1] for t in (5, 10, 20, 30)},
+        "num_pairs": n_consumed,
+        "num_points": len(errors),
+        "num_pair_failures": n_pair_failures,
+        "mean_matches": _safe_mean(match_counts),
+        "mean_time_s": _safe_mean(timings),
+        "resize_long": resize_long,
+    }
+
+
 def _epi_distance(F, kpts0, kpts1):
     if F is None or len(kpts0) == 0:
         return np.full((len(kpts0),), np.inf, dtype=np.float64)
@@ -380,12 +476,37 @@ def _epi_distance(F, kpts0, kpts1):
     return num / np.maximum(n1, _EPS) + num / np.maximum(n0, _EPS)
 
 
+def _epi_distance_hz(F, kpts0, kpts1):
+    """Symmetric epipolar distance, Hartley & Zisserman eq. 11.10.
+
+    sqrt(r^2 * (1/|F x0|_12^2 + 1/|F^T x1|_12^2)): the form used by the WxBS
+    and HardMatch reference evaluators. `_epi_distance` (sum of the two
+    point-to-line distances) is about 1.4x larger and is kept for the
+    `fundamental` task only.
+    """
+    if F is None or len(kpts0) == 0:
+        return np.full((len(kpts0),), np.inf, dtype=np.float64)
+    h0 = np.concatenate([kpts0, np.ones((len(kpts0), 1))], axis=1)
+    h1 = np.concatenate([kpts1, np.ones((len(kpts1), 1))], axis=1)
+    Fx0 = h0 @ F.T
+    Ftx1 = h1 @ F
+    r2 = (h1 * Fx0).sum(axis=1) ** 2
+    inv = 1.0 / np.maximum(Fx0[:, 0] ** 2 + Fx0[:, 1] ** 2, _EPS)         + 1.0 / np.maximum(Ftx1[:, 0] ** 2 + Ftx1[:, 1] ** 2, _EPS)
+    return np.sqrt(r2 * inv + 1e-8)
+
+
 def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
-                              thresholds=(1, 2, 5, 10), progress: bool = True,
-                              ransac_thresh: float = FUND_RANSAC_PX,
+                              progress: bool = True,
+                              ransac_thresh: float = CORR_RANSAC_PX,
                               ths=tuple(range(20))):
-    """`pairs` yields {im_A_path, im_B_path, corrs[Nx4 GT correspondences]}.
-    LoMa-canonical WxBS protocol: F via USAC_MAGSAC, per-pair PCK, mAA = mean cumulative.
+    """`pairs` yields {im_A_path, im_B_path, corrs[Nx4 GT correspondences, original pixels]}.
+
+    WxBS / HardMatch reference protocol: matches are mapped back to original
+    image pixels, F is fitted with USAC_MAGSAC (0.25 px, 0.999, 100k iters),
+    and each pair's PCK is the fraction of GT correspondences within each
+    threshold (0..19 px, H&Z symmetric epipolar distance) of the fitted F.
+    mAA@T averages PCK over thresholds 0..T. Pairs with fewer than 8 GT
+    correspondences are skipped, as in the reference evaluator.
     """
     pck_by_subset: dict[str, list] = {}
     ths_arr = np.asarray(ths, dtype=np.float64)
@@ -394,12 +515,16 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
                              [0.0, 1.0, 0.0]], dtype=np.float64)
     timings, match_counts, inlier_counts, n_kpts0, n_kpts1 = [], [], [], [], []
     n_pair_failures = 0
+    n_skipped = 0
 
     for pair in tqdm(pairs, desc="pairs", disable=not progress):
         im_A_path = Path(pair["im_A_path"])
         im_B_path = Path(pair["im_B_path"])
         gt = np.asarray(pair["corrs"], dtype=np.float64).reshape(-1, 4)
         subset = str(pair.get("subset") or pair.get("set") or "all")
+        if len(gt) < MIN_FUND_MATCHES:
+            n_skipped += 1
+            continue
 
         try:
             (img0, img1, _, _, _, _,
@@ -409,13 +534,12 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
             t0 = time.time()
             result = matcher(img0, img1)
             timings.append(time.time() - t0)
-            kpts0 = np.asarray(result["matched_kpts0"], dtype=np.float64).copy()
-            kpts1 = np.asarray(result["matched_kpts1"], dtype=np.float64).copy()
+            kpts0 = np.asarray(result["matched_kpts0"], dtype=np.float64).reshape(-1, 2).copy()
+            kpts1 = np.asarray(result["matched_kpts1"], dtype=np.float64).reshape(-1, 2).copy()
         except Exception as e:  # noqa: BLE001
             n_pair_failures += 1
             _warn_pair_failure("eval_correspondence_pairs", im_A_path, im_B_path, e, n_pair_failures)
-            zero_pck = np.zeros(len(ths_arr), dtype=np.float64)
-            _append_by_subset(pck_by_subset, subset, zero_pck)
+            _append_by_subset(pck_by_subset, subset, np.zeros(len(ths_arr), dtype=np.float64))
             match_counts.append(0)
             inlier_counts.append(0)
             n_kpts0.append(0)
@@ -427,39 +551,29 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
         n_kpts0.append(len(result.get("all_kpts0", np.empty((0, 2)))))
         n_kpts1.append(len(result.get("all_kpts1", np.empty((0, 2)))))
 
-        gt_resized = gt.copy()
-        gt_resized[:, 0] *= sx0; gt_resized[:, 1] *= sy0
-        gt_resized[:, 2] *= sx1; gt_resized[:, 3] *= sy1
+        # Back to original pixels, where the GT correspondences live.
+        kpts0[:, 0] /= sx0; kpts0[:, 1] /= sy0
+        kpts1[:, 0] /= sx1; kpts1[:, 1] /= sy1
 
         F_pred = None
         if len(kpts0) >= MIN_FUND_MATCHES:
             try:
                 F_pred, _ = cv2.findFundamentalMat(
-                    kpts0.astype(np.float32),
-                    kpts1.astype(np.float32),
-                    method=cv2.USAC_MAGSAC,
-                    ransacReprojThreshold=ransac_thresh,
-                    confidence=FUND_RANSAC_CONF,
-                    maxIters=FUND_RANSAC_MAX_ITERS,
+                    kpts0, kpts1, cv2.USAC_MAGSAC, ransac_thresh,
+                    FUND_RANSAC_CONF, FUND_RANSAC_MAX_ITERS,
                 )
             except cv2.error:
                 F_pred = None
         if F_pred is None or F_pred.shape != (3, 3):
             F_pred = DEGENERATE_F
 
-        if len(gt_resized) == 0:
-            # No GT correspondences for this pair → PCK is undefined; report 0
-            # so per-subset aggregation stays a finite JSON number (was NaN
-            # when computing the empty-mean, breaking jq/browser consumers).
-            pck = np.zeros(len(ths_arr), dtype=np.float64)
-        else:
-            errs = _epi_distance(F_pred, gt_resized[:, :2], gt_resized[:, 2:4])
-            pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
+        errs = _epi_distance_hz(F_pred, gt[:, :2], gt[:, 2:4])
+        pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
         _append_by_subset(pck_by_subset, subset, pck)
 
-    _warn_summary("eval_correspondence_pairs", len(match_counts), n_pair_failures,
+    _warn_summary("eval_correspondence_pairs", len(match_counts) + n_skipped, n_pair_failures,
                   "PCK=0 for those.")
-    out: dict = {"num_pair_failures": n_pair_failures}
+    out: dict = {"num_pair_failures": n_pair_failures, "num_pairs_skipped_few_gt": n_skipped}
     for subset, vecs in pck_by_subset.items():
         if not vecs:
             continue
@@ -657,8 +771,8 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
                               dtype=np.float32)
         subset = str(pair.get("subset") or "all")
 
-        rawA = cv2.imread(str(im_A_path), cv2.IMREAD_COLOR)
-        rawB = cv2.imread(str(im_B_path), cv2.IMREAD_COLOR)
+        rawA = imread(str(im_A_path), cv2.IMREAD_COLOR)
+        rawB = imread(str(im_B_path), cv2.IMREAD_COLOR)
         if rawA is None or rawB is None or len(kpts_A) == 0:
             continue
         rawA = cv2.cvtColor(rawA, cv2.COLOR_BGR2RGB)

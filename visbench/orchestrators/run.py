@@ -17,6 +17,7 @@ from ..core.harness import (
     eval_descriptor_pairs,
     eval_fundamental_pairs,
     eval_homography_pairs,
+    eval_point_homography_pairs,
     eval_pose_pairs,
     reset_caches,
 )
@@ -112,6 +113,7 @@ def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
 _TASK_DISPATCH = {
     "pose": eval_pose_pairs,
     "homography": eval_homography_pairs,
+    "homography_points": eval_point_homography_pairs,
     "correspondence": eval_correspondence_pairs,
     "fundamental": eval_fundamental_pairs,
     "descriptor": eval_descriptor_pairs,
@@ -195,8 +197,8 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
         )
 
     matcher = build_matcher(method, device=device)
-    # Forward spec.kwargs (sevenscenes_wide vs sevenscenes, aachen_v1_1_hard,
-    # tartanair_wide, etc. all differ only by the kwargs they hand iter_pairs).
+    # Forward spec.kwargs (e.g. aachen_v1_1 vs aachen_v1_1_hard differ only by
+    # the kwargs they hand iter_pairs).
     # Production used to drop these, silently making `_wide`/`_hard` variants
     # identical to their base.
     pairs = iter_dataset_pairs(spec, data_root, max_pairs, seed)

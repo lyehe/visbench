@@ -104,28 +104,6 @@ def test_two_calls_to_iter_pairs_produce_same_H():
     np.testing.assert_array_equal(Hs[0], Hs[2])  # both (320, 240)
 
 
-# --- Aachen directory consistency ------------------------------------------
-
-def test_aachen_default_roots_consistent():
-    """aachen_v1_1*, aachen_day, and aachen_night must agree on default_root
-    so a user who prepares data under one name can use the others."""
-    from visbench.datasets import get
-    roots = {n: str(get(n).default_root) for n in
-             ("aachen_day", "aachen_night", "aachen_v1_1", "aachen_v1_1_hard")}
-    assert len(set(roots.values())) == 1, \
-        f"Aachen modules disagree on default_root: {roots}"
-
-
-# --- 7-Scenes K consistency ------------------------------------------------
-
-def test_seven_scenes_K_consistent_across_modules():
-    """sevenscenes/sevenscenes_wide (pair-list) and sevenscenes_local
-    (frame-skip) must agree on K for the same camera."""
-    from visbench.datasets.seven_scenes import K_7SCENES as K_pair_list
-    from visbench.datasets.sevenscenes_local import K_7SCENES as K_local
-    np.testing.assert_array_equal(K_pair_list, K_local)
-
-
 # --- spec.kwargs threading -------------------------------------------------
 
 def test_run_one_forwards_spec_kwargs(monkeypatch, tmp_path):

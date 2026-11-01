@@ -23,15 +23,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _real_geom_check as rg  # noqa: E402
 
 
-MATCHER_TRAINING = Path(r"D:\Yehe\matcher_training")
+MATCHER_TRAINING = Path(os.environ.get("VISBENCH_REAL_DATA_ROOT", r"D:\Yehe\matcher_training"))
 N_PAIRS = 8
 MAX_SIDE = 840  # downscale big images (MegaDepth) to keep SIFT on CPU fast
 
 # dataset -> (pairs to scan lazily, stride when picking pairs from the scan)
 SAMPLING = {
-    "tartanair": (400, 50),
     "megadepth1500": (1500, 187),
-    "tum_rgbd": (400, 50),
+    "eth3d": (400, 50),
 }
 
 
@@ -91,36 +90,9 @@ def _evaluate(name: str, pairs: list[dict]) -> rg.Summary:
     return summary
 
 
-@pytest.mark.parametrize("name", ["tartanair", "megadepth1500", "tum_rgbd"])
+@pytest.mark.parametrize("name", ["megadepth1500", "eth3d"])
 def test_real_pose_geometry(name):
     summary = _evaluate(name, _pick_pairs(name))
     print("\n" + summary.report())
     assert summary.usable, f"{name}: no pair had >= {rg.MIN_MATCHES} SIFT matches\n{summary.report()}"
     assert summary.passed, summary.report()
-
-
-def _parse_poses_ned_as_opencv(p: Path):
-    """The pre-2026-10-01 bug: NED body-frame c2w used directly as an OpenCV camera."""
-    from visbench.datasets import tartanair as ta
-
-    out = []
-    for ln in p.read_text().splitlines():
-        toks = ln.strip().split()
-        if len(toks) < 7:
-            continue
-        tx, ty, tz, qx, qy, qz, qw = (float(x) for x in toks[:7])
-        R_wc = ta._q_to_R(qx, qy, qz, qw)
-        t_wc = np.array([tx, ty, tz], dtype=np.float64)
-        out.append((R_wc.T, -R_wc.T @ t_wc))
-    return out
-
-
-def test_sensitivity_tartanair_without_ned_fix_fails(monkeypatch):
-    """Sanity: re-introducing the NED-as-OpenCV bug must make the check FAIL."""
-    from visbench.datasets import tartanair as ta
-
-    monkeypatch.setattr(ta, "_parse_poses", _parse_poses_ned_as_opencv)
-    summary = _evaluate("tartanair[NED-bug]", _pick_pairs("tartanair"))
-    print("\n" + summary.report())
-    assert summary.usable
-    assert not summary.passed, "check failed to detect the NED-as-OpenCV pose bug:\n" + summary.report()

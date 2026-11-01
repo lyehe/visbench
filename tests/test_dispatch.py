@@ -147,8 +147,8 @@ def test_every_registered_dataset_has_a_dispatcher_path():
     """Sanity: every dataset's task is one the dispatcher knows about
     OR will fall through to the qualitative fallback."""
     from visbench.datasets import available, get
-    known = {"pose", "homography", "correspondence", "fundamental",
-             "descriptor", "qualitative"}
+    from visbench._tasks import TASKS
+    known = set(TASKS)
     unknown_tasks = set()
     for n in available():
         spec = get(n)

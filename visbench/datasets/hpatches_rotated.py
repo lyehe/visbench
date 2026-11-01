@@ -18,6 +18,7 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from ..core.imageio import imread
 from ._registry import DatasetSpec, register
 from .hpatches import DEGENERATE, download as _download_hpatches
 
@@ -74,7 +75,7 @@ def iter_pairs(data_root: Path | str, rotation_deg: float = 90.0,
             rotated_path = out_dir / f"{k}.png"
 
             if not rotated_path.exists():
-                im_bgr = cv2.imread(str(imk), cv2.IMREAD_COLOR)
+                im_bgr = imread(str(imk), cv2.IMREAD_COLOR)
                 h, w = im_bgr.shape[:2]
                 H_rot, (nw, nh) = _rotation_homography(rotation_deg, w, h)
                 rotated = cv2.warpPerspective(im_bgr, H_rot, (nw, nh), borderValue=(0, 0, 0))
@@ -105,7 +106,7 @@ def _make_rot(angle):
     return it
 
 
-for _ang in (10, 20, 30, 45, 60, 90, 120, 135, 150, 180, 225, 270, 315):
+for _ang in (45, 90, 180):
     register(f"hpatches_rot{_ang}", DatasetSpec(
         task="homography",
         iter_pairs=_make_rot(_ang),

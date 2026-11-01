@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Callable, Iterator
 
 import cv2
+
+from ..core.imageio import imread
 import numpy as np
 
 from .hpatches import DEGENERATE
@@ -77,7 +79,7 @@ def make_iter(pert_name: str, fn: Callable[[np.ndarray], np.ndarray],
             out_dir.mkdir(exist_ok=True)
             out_path = out_dir / f"{pair['pair_idx']}.png"
             if not out_path.exists():
-                arr = cv2.imread(str(im_B), cv2.IMREAD_COLOR)
+                arr = imread(str(im_B), cv2.IMREAD_COLOR)
                 warped = fn(arr)
                 cv2.imwrite(str(out_path), warped)
             H_gt = pair["H_gt"].copy()

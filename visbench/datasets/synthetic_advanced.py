@@ -157,42 +157,10 @@ _BASE_KW = dict(
 )
 
 
-for k in (5, 15):
-    register(f"synthetic_motion_blur_{k}", DatasetSpec(
-        "homography", _make_iter(f"motion_blur_{k}", _motion_blur(k)), Path("hpatches"), **_BASE_KW))
-
-for k in (5, 11):
-    register(f"synthetic_defocus_{k}", DatasetSpec(
-        "homography", _make_iter(f"defocus_{k}", _defocus(k)), Path("hpatches"), **_BASE_KW))
-
-register("synthetic_vignette_strong", DatasetSpec(
-    "homography", _make_iter("vignette_strong", _vignette(0.9)), Path("hpatches"), **_BASE_KW))
+# Compact stress set (see synthetic.py).
+register("synthetic_motion_blur_15", DatasetSpec(
+    "homography", _make_iter("motion_blur_15", _motion_blur(15)), Path("hpatches"), **_BASE_KW))
 register("synthetic_low_light", DatasetSpec(
     "homography", _make_iter("low_light", _low_light()), Path("hpatches"), **_BASE_KW))
-register("synthetic_high_contrast", DatasetSpec(
-    "homography", _make_iter("high_contrast", _high_contrast()), Path("hpatches"), **_BASE_KW))
 register("synthetic_fog", DatasetSpec(
     "homography", _make_iter("fog", _fog()), Path("hpatches"), **_BASE_KW))
-register("synthetic_chromatic_aberration", DatasetSpec(
-    "homography", _make_iter("chromatic_ab", _chromatic_aberration()), Path("hpatches"), **_BASE_KW))
-register("synthetic_grayscale", DatasetSpec(
-    "homography", _make_iter("grayscale", _grayscale()), Path("hpatches"), **_BASE_KW))
-register("synthetic_invert", DatasetSpec(
-    "homography", _make_iter("invert", _invert()), Path("hpatches"), **_BASE_KW))
-register("synthetic_bgr_swap", DatasetSpec(
-    "homography", _make_iter("bgr_swap", _bgr_swap()), Path("hpatches"), **_BASE_KW))
-register("synthetic_clahe", DatasetSpec(
-    "homography", _make_iter("clahe", _clahe()), Path("hpatches"), **_BASE_KW))
-register("synthetic_posterize_3bit", DatasetSpec(
-    "homography", _make_iter("posterize_3bit", _posterize(3)), Path("hpatches"), **_BASE_KW))
-
-for b in (4, 8):
-    register(f"synthetic_pixelize_{b}", DatasetSpec(
-        "homography", _make_iter(f"pixelize_{b}", _pixelize(b)), Path("hpatches"), **_BASE_KW))
-
-register("synthetic_occlusion_25", DatasetSpec(
-    "homography", _make_iter("occlusion_25", _occlusion(0.25)), Path("hpatches"), **_BASE_KW))
-register("synthetic_crop_center_50", DatasetSpec(
-    "homography",
-    _make_iter("crop_center_50", _crop_center(0.5)),
-    Path("hpatches"), **_BASE_KW))

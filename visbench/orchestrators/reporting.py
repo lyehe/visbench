@@ -18,6 +18,7 @@ _PANEL_DIR = Path(__file__).resolve().parent.parent.parent / "panels"
 TASK_METRICS: dict[str, list[tuple[str, str]]] = {
     "pose": [("auc_5", "AUC@5"), ("auc_10", "AUC@10"), ("auc_20", "AUC@20")],
     "homography": [("all_auc_3", "AUC@3px"), ("all_auc_5", "AUC@5px"), ("all_auc_10", "AUC@10px")],
+    "homography_points": [("auc_10px", "AUC@10px"), ("auc_5px", "AUC@5px"), ("auc_20px", "AUC@20px")],
     "correspondence": [("all_mAA_10", "mAA@10px"), ("all_mAA_5", "mAA@5px"), ("all_pck_10", "PCK@10px")],
     "fundamental": [("all_mAA", "mAA"), ("all_pck_3", "PCK@3px"), ("all_pck_10", "PCK@10px")],
     "descriptor": [("all_mAP", "mAP"), ("all_top1", "top1"), ("all_top5", "top5")],

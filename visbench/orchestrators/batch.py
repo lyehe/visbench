@@ -23,7 +23,7 @@ from .run import (
 )
 
 POSE_TASKS = ("pose",)
-HOMOGRAPHY_TASKS = ("homography", "correspondence", "fundamental")
+HOMOGRAPHY_TASKS = ("homography", "homography_points", "correspondence", "fundamental")
 
 
 def per_dataset_max_pairs(datasets: list[str], pose: int | None, homography: int | None) -> dict:

@@ -17,6 +17,7 @@ from __future__ import annotations
 TASKS: frozenset[str] = frozenset({
     "pose",
     "homography",
+    "homography_points",
     "correspondence",
     "descriptor",
     "fundamental",

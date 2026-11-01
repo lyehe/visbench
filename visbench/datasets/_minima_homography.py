@@ -13,6 +13,8 @@ from math import pi
 from pathlib import Path
 
 import cv2
+
+from ..core.imageio import imread
 import numpy as np
 from numpy.random import uniform
 
@@ -135,7 +137,7 @@ def warp_and_cache(src_path: str | Path, H: np.ndarray, cache_path: Path,
             depth_norm = depth_norm.squeeze()
         img = cv2.applyColorMap(depth_norm, cv2.COLORMAP_JET)
     else:
-        img = cv2.imread(str(src_path), cv2.IMREAD_COLOR)
+        img = imread(str(src_path), cv2.IMREAD_COLOR)
         if img is None:
             raise FileNotFoundError(f"cv2 could not read {src_path}")
 
@@ -152,7 +154,7 @@ def load_resized_to_disk(src_path: str | Path, cache_path: Path,
     if cache_path.exists():
         return cache_path
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-    img = cv2.imread(str(src_path), cv2.IMREAD_COLOR)
+    img = imread(str(src_path), cv2.IMREAD_COLOR)
     if img is None:
         raise FileNotFoundError(f"cv2 could not read {src_path}")
     img = cv2.resize(img, (target_shape[1], target_shape[0]), interpolation=cv2.INTER_LINEAR)

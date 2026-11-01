@@ -11,6 +11,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from ..core.imageio import imread
 from ._registry import DatasetSpec, register
 from ._synthetic_common import (
     base_pairs as _base_pairs,
@@ -47,7 +48,7 @@ def _compound_iter(name: str, rotation_deg: float, photometric):
             out_dir = cache / pair["seq"]
             out_dir.mkdir(exist_ok=True)
             out_path = out_dir / f"{pair['pair_idx']}.png"
-            arr = cv2.imread(str(im_B), cv2.IMREAD_COLOR)
+            arr = imread(str(im_B), cv2.IMREAD_COLOR)
             h, w = arr.shape[:2]
             if rotation_deg != 0:
                 H_rot, (nw, nh) = _rotation_homography(rotation_deg, w, h)
@@ -69,17 +70,7 @@ def _compound_iter(name: str, rotation_deg: float, photometric):
 
 
 _combos = {
-    "rot90_noise15":     (90.0, _gauss_noise(15)),
-    "rot90_jpeg30":      (90.0, _jpeg(30)),
-    "rot90_blur7":       (90.0, _gauss_blur(7)),
     "rot90_low_light":   (90.0, _low_light()),
-    "rot90_fog":         (90.0, _fog()),
-    "rot45_motion_blur": (45.0, _motion_blur(9)),
-    "noise15_jpeg30":    (0.0,  lambda arr: _jpeg(30)(_gauss_noise(15)(arr))),
-    "blur7_noise15":     (0.0,  lambda arr: _gauss_noise(15)(_gauss_blur(7)(arr))),
-    "low_light_blur7":   (0.0,  lambda arr: _gauss_blur(7)(_low_light()(arr))),
-    "fog_chromatic":     (0.0,  lambda arr: _chromatic_aberration()(_fog()(arr))),
-    "defocus_low_light": (0.0,  lambda arr: _low_light()(_defocus(5)(arr))),
 }
 
 _BASE_KW = dict(

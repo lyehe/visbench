@@ -12,6 +12,7 @@ from typing import Callable
 import cv2
 import numpy as np
 
+from ..core.imageio import imread
 from ._registry import DatasetSpec, register
 from ._synthetic_common import base_pairs as _base_pairs
 from .synthetic import download as _download_hpatches
@@ -31,7 +32,7 @@ def _compose_iter(name: str, make_H_and_warp: Callable[[int, int], tuple]):
             out_dir = cache / pair["seq"]
             out_dir.mkdir(exist_ok=True)
             out_path = out_dir / f"{pair['pair_idx']}.png"
-            arr = cv2.imread(str(im_B), cv2.IMREAD_COLOR)
+            arr = imread(str(im_B), cv2.IMREAD_COLOR)
             h, w = arr.shape[:2]
             H_aug, (nw, nh) = make_H_and_warp(w, h)
             if not out_path.exists():
@@ -137,10 +138,4 @@ _BASE_KW = dict(
 )
 
 
-register("synthetic_hflip", DatasetSpec("homography", _compose_iter("hflip", _hflip()), Path("hpatches"), **_BASE_KW))
-register("synthetic_vflip", DatasetSpec("homography", _compose_iter("vflip", _vflip()), Path("hpatches"), **_BASE_KW))
-register("synthetic_shear_0p1", DatasetSpec("homography", _compose_iter("shear_0p1", _shear(0.1)), Path("hpatches"), **_BASE_KW))
-register("synthetic_shear_0p3", DatasetSpec("homography", _compose_iter("shear_0p3", _shear(0.3)), Path("hpatches"), **_BASE_KW))
-register("synthetic_perspective_mild", DatasetSpec("homography", _compose_iter("persp_mild", _perspective(0.08)), Path("hpatches"), **_BASE_KW))
 register("synthetic_perspective_strong", DatasetSpec("homography", _compose_iter("persp_strong", _perspective(0.20)), Path("hpatches"), **_BASE_KW))
-register("synthetic_affine_random", DatasetSpec("homography", _compose_iter("affine_random", _random_affine()), Path("hpatches"), **_BASE_KW))

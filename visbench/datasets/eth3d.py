@@ -156,4 +156,3 @@ _KW = dict(
     license="CC BY-NC-SA 4.0",
 )
 register("eth3d", DatasetSpec("pose", iter_pairs, Path("eth3d"), default_resize=1200, **_KW))
-register("eth3d_highres", DatasetSpec("pose", iter_pairs, Path("eth3d_highres"), default_resize=1200, **_KW))

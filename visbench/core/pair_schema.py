@@ -46,6 +46,12 @@ class CorrespondencePair(_Base, total=False):
     corrs: "np.ndarray"
 
 
+class PointHomographyPair(_Base, total=False):
+    """`task=homography_points`. pts_A/pts_B are (N, 2) annotated pixel correspondences."""
+    pts_A: "np.ndarray"
+    pts_B: "np.ndarray"
+
+
 class FundamentalPair(_Base, total=False):
     """`task=fundamental`. F_gt is the 3x3 fundamental matrix."""
     F_gt: "np.ndarray"
@@ -62,6 +68,7 @@ class DescriptorPair(_Base, total=False):
 REQUIRED_KEYS_BY_TASK: dict[str, tuple[str, ...]] = {
     "pose":           ("im_A_path", "im_B_path", "K0", "K1", "R_0to1", "t_0to1"),
     "homography":     ("im_A_path", "im_B_path", "H_gt"),
+    "homography_points": ("im_A_path", "im_B_path", "pts_A", "pts_B"),
     "correspondence": ("im_A_path", "im_B_path", "corrs"),
     "fundamental":    ("im_A_path", "im_B_path", "F_gt"),
     "descriptor":     ("im_A_path", "im_B_path", "kpts_A", "kpts_B"),
@@ -70,7 +77,7 @@ REQUIRED_KEYS_BY_TASK: dict[str, tuple[str, ...]] = {
 
 
 __all__ = [
-    "PosePair", "HomographyPair", "CorrespondencePair",
+    "PosePair", "HomographyPair", "PointHomographyPair", "CorrespondencePair",
     "FundamentalPair", "DescriptorPair",
     "REQUIRED_KEYS_BY_TASK",
 ]

@@ -79,34 +79,14 @@ _BASE_KW = dict(
     license="CC BY-NC-SA 4.0",
 )
 
-for q in (10, 30, 50):
-    register(f"synthetic_jpeg_q{q}", DatasetSpec(
-        "homography", _make_iter(f"jpeg_q{q}", _jpeg(q)), Path("hpatches"), **_BASE_KW))
-
-for sigma in (5, 15, 30):
-    register(f"synthetic_noise_{sigma}", DatasetSpec(
-        "homography", _make_iter(f"noise_{sigma}", _gauss_noise(float(sigma))),
-        Path("hpatches"), **_BASE_KW))
-
-for k in (3, 7, 15):
-    register(f"synthetic_blur_{k}", DatasetSpec(
-        "homography", _make_iter(f"blur_{k}", _gauss_blur(k)), Path("hpatches"), **_BASE_KW))
-
-register("synthetic_gamma_0p5", DatasetSpec(
-    "homography", _make_iter("gamma_0p5", _gamma(0.5)), Path("hpatches"), **_BASE_KW))
-register("synthetic_gamma_2p0", DatasetSpec(
-    "homography", _make_iter("gamma_2p0", _gamma(2.0)), Path("hpatches"), **_BASE_KW))
-
+# Compact stress set: one strong setting per degradation family. The wider
+# sweeps (other JPEG/noise/blur levels, gamma, HSV, salt-and-pepper, 2x scale)
+# were removed as low-signal: each variant costs a full HPatches pass.
+register("synthetic_jpeg_q10", DatasetSpec(
+    "homography", _make_iter("jpeg_q10", _jpeg(10)), Path("hpatches"), **_BASE_KW))
+register("synthetic_noise_30", DatasetSpec(
+    "homography", _make_iter("noise_30", _gauss_noise(30.0)), Path("hpatches"), **_BASE_KW))
 register("synthetic_scale_0p5", DatasetSpec(
     "homography",
     _make_iter("scale_0p5", _scale(0.5), scale_xy=(0.5, 0.5)),
     Path("hpatches"), **_BASE_KW))
-register("synthetic_scale_2p0", DatasetSpec(
-    "homography",
-    _make_iter("scale_2p0", _scale(2.0), scale_xy=(2.0, 2.0)),
-    Path("hpatches"), **_BASE_KW))
-
-register("synthetic_hsv_shift_30", DatasetSpec(
-    "homography", _make_iter("hsv_shift_30", _hsv_shift(30)), Path("hpatches"), **_BASE_KW))
-register("synthetic_saltpepper_2pct", DatasetSpec(
-    "homography", _make_iter("saltpepper_2pct", _salt_pepper(0.02)), Path("hpatches"), **_BASE_KW))

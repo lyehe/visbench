@@ -16,6 +16,7 @@ from typing import Iterator
 import cv2
 import numpy as np
 
+from ..core.imageio import imread
 from ._registry import DatasetSpec, register
 from .hpatches import DEGENERATE, download as _download_hpatches
 
@@ -56,7 +57,7 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
         im1 = seq / "1.ppm"
         if not im1.exists():
             continue
-        img1 = cv2.imread(str(im1), cv2.IMREAD_GRAYSCALE)
+        img1 = imread(str(im1), cv2.IMREAD_GRAYSCALE)
         if img1 is None:
             continue
         kp1 = _detect_kpts(img1, n_max=n_kpts)
@@ -71,7 +72,7 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
             if not (imk.exists() and Hk.exists()):
                 continue
             H = np.loadtxt(Hk)
-            imgk = cv2.imread(str(imk), cv2.IMREAD_GRAYSCALE)
+            imgk = imread(str(imk), cv2.IMREAD_GRAYSCALE)
             if imgk is None:
                 continue
             hk, wk = imgk.shape
