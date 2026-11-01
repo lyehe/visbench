@@ -37,9 +37,21 @@ def _l2(a: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def _hamming(a: np.ndarray, b: np.ndarray) -> np.ndarray:
-    a = np.unpackbits(a.astype(np.uint8), axis=1)
-    b = np.unpackbits(b.astype(np.uint8), axis=1)
-    return (a[:, None, :] != b[None, :, :]).sum(axis=2).astype(np.float32)
+    """Pairwise Hamming distance with chunked rows.
+
+    The naive `(a[:,None,:] != b[None,:,:]).sum(...)` materialises an
+    `(N_a, N_b, 8*D)` bool tensor — with the default ORB cap of 4096 keypoints
+    and 32-byte descriptors that's ~4 GiB, OOM-risky on every non-trivial pair.
+    Chunking over N_a keeps peak memory at `chunk * N_b * 8*D`.
+    """
+    a_bits = np.unpackbits(a.astype(np.uint8), axis=1)
+    b_bits = np.unpackbits(b.astype(np.uint8), axis=1)
+    out = np.empty((a_bits.shape[0], b_bits.shape[0]), dtype=np.float32)
+    chunk = 256
+    for i in range(0, a_bits.shape[0], chunk):
+        sl = a_bits[i:i + chunk, None, :] != b_bits[None, :, :]
+        out[i:i + chunk] = sl.sum(axis=2).astype(np.float32)
+    return out
 
 
 def mutual_nearest_neighbor(desc0: np.ndarray, desc1: np.ndarray,
@@ -53,7 +65,13 @@ def mutual_nearest_neighbor(desc0: np.ndarray, desc1: np.ndarray,
     idx0 = np.arange(len(desc0))
     mutual = nn10[nn01] == idx0
     if ratio is not None and d01.shape[1] >= 2:
-        part = np.partition(d01, 2, axis=1)[:, :2]
+        # np.partition(x, kth) puts x[kth] in sorted position; elements <kth are
+        # not internally sorted. For Lowe's ratio test we need the SMALLEST and
+        # SECOND-SMALLEST in known positions. Using kth=1 guarantees x[0] is
+        # the min and x[1] is the second-min (kth=2 was a long-standing bug
+        # that randomly swapped them, corrupting roughly half the ratio
+        # decisions on every SIFT/RootSIFT match).
+        part = np.partition(d01, 1, axis=1)[:, :2]
         ratio_ok = part[:, 0] < ratio * np.maximum(part[:, 1], 1e-12)
         mutual = mutual & ratio_ok
     i0 = idx0[mutual]
@@ -65,6 +83,12 @@ class CustomFeatureMatcher(BaseMatcher):
     """Subclass and override `detect_and_describe`.
 
     Returns (kpts: (N,2) float xy, desc: (N,D) float or (N,D8) uint8 packed).
+
+    Subclasses backed by a cv2 feature object (SIFT, ORB, ...) can additionally
+    override `get_cv_feature()` so the descriptor-isolation eval can extract
+    descriptors at user-supplied keypoint locations without reaching into
+    private attributes. Returning None signals the matcher cannot describe at
+    fixed keypoints; the descriptor eval will then report `skipped`.
     """
 
     descriptor_metric: str = "l2"
@@ -75,6 +99,13 @@ class CustomFeatureMatcher(BaseMatcher):
 
     def detect_and_describe(self, img_u8: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         raise NotImplementedError
+
+    def get_cv_feature(self):
+        """Return an OpenCV feature object with `.compute(gray, keypoints)`, or None.
+
+        Used by the descriptor-isolation eval. Default: None (skips).
+        """
+        return None
 
     def _forward(self, img0: torch.Tensor, img1: torch.Tensor):
         u0 = _to_numpy_uint8(img0)

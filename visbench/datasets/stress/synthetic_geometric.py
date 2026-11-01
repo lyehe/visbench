@@ -1,0 +1,113 @@
+"""Geometric stressors that compose a transform with the GT H.
+
+Source:  derived from `hpatches`
+License: inherits HPatches (CC BY-NC-SA 4.0).
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Callable
+
+import cv2
+import numpy as np
+
+from ...core.imageio import imread
+from .._registry import DatasetSpec, register
+from ._synthetic_common import base_pairs as _base_pairs
+from .synthetic import download as _download_hpatches
+
+
+def download(data_root: Path | str) -> Path:
+    return _download_hpatches(data_root)
+
+
+def _compose_iter(name: str, make_H_and_warp: Callable[[int, int], tuple]):
+    def it(data_root, max_pairs=None, **_):
+        data_root = Path(data_root)
+        cache = data_root / f"_synthetic_{name}"
+        cache.mkdir(exist_ok=True)
+        for pair in _base_pairs(data_root, max_pairs):
+            im_B = Path(pair["im_B_path"])
+            out_dir = cache / pair["seq"]
+            out_dir.mkdir(exist_ok=True)
+            out_path = out_dir / f"{pair['pair_idx']}.png"
+            arr = imread(str(im_B), cv2.IMREAD_COLOR)
+            h, w = arr.shape[:2]
+            H_aug, (nw, nh) = make_H_and_warp(w, h)
+            if not out_path.exists():
+                warped = cv2.warpPerspective(arr, H_aug, (nw, nh), borderValue=(0, 0, 0))
+                cv2.imwrite(str(out_path), warped)
+            yield {
+                **pair,
+                "im_B_path": str(out_path),
+                "H_gt": H_aug @ pair["H_gt"],
+                "subset": f"{pair['subset']}_{name}",
+            }
+    return it
+
+
+def _stable_rng(seed: int, w: int, h: int) -> np.random.Generator:
+    """Deterministic per-call RNG keyed on (seed, w, h).
+
+    The closure-style `rng = np.random.default_rng(seed)` at module import
+    time was a bug: state advanced across pairs, so a second iter_pairs() call
+    on the same process produced a different H_aug than the one already cached
+    to disk — silently desyncing H_gt from the warped image for
+    synthetic_perspective_* and synthetic_affine_random. Now H_aug is a pure
+    function of (seed, w, h), matching the on-disk cache semantics.
+    """
+    key = (int(seed) ^ int(w) ^ (int(h) << 16)) & 0xFFFFFFFF
+    return np.random.default_rng(key)
+
+
+def _perspective(strength: float, seed: int = 0):
+    def make(w, h):
+        rng = _stable_rng(seed, w, h)
+        d = strength * min(w, h)
+        src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
+        dst = src + rng.uniform(-d, d, src.shape).astype(np.float32)
+        H = cv2.getPerspectiveTransform(src, dst)
+        corners = np.concatenate([dst, np.ones((4, 1), dtype=np.float32)], axis=1).T
+        xs = corners[0]
+        ys = corners[1]
+        tx, ty = -min(0.0, float(xs.min())), -min(0.0, float(ys.min()))
+        T = np.array([[1.0, 0.0, tx], [0.0, 1.0, ty], [0.0, 0.0, 1.0]])
+        H_full = T @ H
+        nw = int(np.ceil(float(xs.max()) + tx))
+        nh = int(np.ceil(float(ys.max()) + ty))
+        return H_full, (nw, nh)
+    return make
+
+
+def _random_affine(seed: int = 0):
+    def make(w, h):
+        rng = _stable_rng(seed, w, h)
+        theta = rng.uniform(-30, 30) * np.pi / 180.0
+        s = rng.uniform(0.8, 1.3)
+        sh = rng.uniform(-0.15, 0.15)
+        R = np.array([[np.cos(theta) * s, -np.sin(theta) * s + sh, 0.0],
+                      [np.sin(theta) * s, np.cos(theta) * s, 0.0],
+                      [0.0, 0.0, 1.0]])
+        cx, cy = w / 2.0, h / 2.0
+        T1 = np.array([[1.0, 0.0, -cx], [0.0, 1.0, -cy], [0.0, 0.0, 1.0]])
+        corners = np.array([[0, 0, 1], [w, 0, 1], [w, h, 1], [0, h, 1]], dtype=np.float64).T
+        wc = R @ T1 @ corners
+        xs, ys = wc[0], wc[1]
+        tx, ty = -min(0.0, float(xs.min())), -min(0.0, float(ys.min()))
+        T2 = np.array([[1.0, 0.0, tx], [0.0, 1.0, ty], [0.0, 0.0, 1.0]])
+        H = T2 @ R @ T1
+        nw = int(np.ceil(float(xs.max()) + tx))
+        nh = int(np.ceil(float(ys.max()) + ty))
+        return H, (nw, nh)
+    return make
+
+
+_BASE_KW = dict(
+    download=download,
+    source_url="https://github.com/hpatches/hpatches-dataset",
+    license="CC BY-NC-SA 4.0",
+)
+
+
+register("synthetic_perspective_strong", DatasetSpec("homography", _compose_iter("persp_strong", _perspective(0.20)), Path("hpatches"), **_BASE_KW))

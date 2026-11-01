@@ -1,11 +1,18 @@
 # visbench
 
-Benchmark harness for visual feature matching. Ships:
+Benchmark harness for visual feature matching:
 
-- **Core harness** — pose / homography / classical metrics with shared image caching, RANSAC dispatch, and AUC reporting.
-- **~40 datasets** — registered behind a single interface with `download(data_root)` and `iter_pairs(data_root)`.
-- **Reference methods** — OpenCV classical (SIFT, RootSIFT, ORB, AKAZE, BRISK) plus a passthrough to any matcher in [vismatch](https://github.com/gmberton/vismatch).
-- **Standard CLI** — `visbench download`, `visbench run`, `visbench standard`, `visbench report`.
+- **Benchmarks recent papers report** — MegaDepth-1500, HardMatch, WxBS, ETH3D,
+  HPatches, SatAst, the MINIMA cross-modal suite, rotated splits and a compact
+  stress set (35 datasets, all public; see [DATASETS.md](DATASETS.md)).
+- **Reference protocols** — each task reproduces its paper's evaluator (pose
+  AUC, WxBS/HardMatch mAA, HPatches corner AUC, SatAst reprojection AUC), with
+  published scores alongside ([BENCHMARKS.md](BENCHMARKS.md)).
+- **Methods** — OpenCV classical (SIFT, RootSIFT, ORB, AKAZE, BRISK), any
+  [vismatch](https://github.com/gmberton/vismatch) matcher (`vismatch:<name>`,
+  including LoMa-B128/B/L/G), and optional RoMaXX matchers
+  (`romaxx:<kind>[:<arg>]`: FlexGlue, FlexGlueTRT, RoMaTRT, MinimaRoMaTRT, LoMaTRT).
+- **CLI** — `list`, `download`, `check`, `run`, `batch`, `standard`, `report`.
 
 ## Install
 
@@ -14,8 +21,7 @@ git clone https://github.com/lyehe/visbench
 cd visbench
 
 # Pull only the vismatch submodule (one level deep). vismatch itself has 25+
-# nested matcher submodules (RoMa, LightGlue, DeDoDe, MASt3R, romaxx, ...) that
-# are NOT needed at install time — vismatch loads them lazily on first use.
+# nested matcher submodules; check out only the ones you use (below).
 git submodule update --init third_party/vismatch
 
 uv venv
@@ -23,13 +29,36 @@ uv pip install -e .
 uv pip install -e ./third_party/vismatch
 ```
 
-`uv` resolves torch from the CUDA 13.0 index pinned in `pyproject.toml` (matches vismatch's stack). For CPU-only or different CUDA, edit `[[tool.uv.index]]`.
+`uv` resolves torch from the CUDA 13.0 index pinned in `pyproject.toml`. For
+CPU-only or another CUDA version, edit `[[tool.uv.index]]`.
 
 > **Do not use `--recurse-submodules` or `git submodule update --init --recursive`.**
-> Those would clone every matcher repo nested inside vismatch (~tens of GB),
-> none of which are needed unless you actually call that specific matcher.
-> When you call e.g. `visbench:roma` for the first time, vismatch initialises
-> its own RoMa submodule on demand.
+> That clones every matcher repo nested inside vismatch (tens of GB).
+
+Matcher code lives in vismatch's own submodules. Check out the ones you need,
+for example LoMa:
+
+```bash
+git -C third_party/vismatch submodule update --init vismatch/third_party/LoMa
+```
+
+Optional:
+
+- `uv pip install -e .[aachen]` — pycolmap for the Aachen pose sets.
+- **RoMaXX** (`romaxx:` methods) — RoMaXX is not on PyPI and pins its own torch
+  (FlexGlue bundles require Torch 2.11 + TensorRT 10.16). Run `romaxx:` methods
+  from RoMaXX's environment with visbench on the path; vismatch is not needed
+  there:
+
+  ```bash
+  PYTHONPATH=/path/to/visbench /path/to/romaxx/.venv/Scripts/python -m visbench run \
+      --dataset hardmatch --method romaxx:flexglue-trt:/path/to/flexglue_native_512_core
+  ```
+
+- **SatAst images** are served only over rsync. Put `rsync` on `PATH` and run
+  `visbench download satast`. On Windows, Git for Windows supplies the MSYS
+  runtime but not rsync itself; MSYS2's `rsync` package (plus its `popt`,
+  `libidn2`, `libunistring`, `libxxhash`, `liblz4`, `libzstd` DLLs) works.
 
 ## Quickstart
 
@@ -37,24 +66,66 @@ uv pip install -e ./third_party/vismatch
 visbench list datasets
 visbench list methods
 
-visbench download hpatches
-visbench run --dataset hpatches --method sift --max-pairs 50 --out results/
+visbench download hardmatch
+visbench check hardmatch                 # sanity-check the ground truth on CPU
+visbench run --dataset hardmatch --method vismatch:loma-g --out results/hardmatch__loma-g.json
 
-# Run any vismatch matcher by name:
-visbench run --dataset hpatches --method vismatch:lightglue --max-pairs 50
-
-# Standard panel (multiple datasets x methods):
-visbench standard --panel core --methods panels/classical_methods.txt --out-dir results/
-visbench report --results-dir results/ --top 10
+# Core panel (MegaDepth-1500, HardMatch, WxBS, ETH3D, HPatches) x methods:
+visbench standard --panel core --methods panels/sota_methods.txt --out-dir results/
+visbench report --results-dir results/            # rankings, leaderboard, matrix
 ```
 
-## Datasets and benchmarks
+Panels: `core`, `extended` (rotated and harder splits, SatAst, Aachen),
+`crossmodal`, `stress`. Method lists: `panels/*_methods.txt`.
 
-- [DATASETS.md](DATASETS.md) — full catalog: source URLs, papers, licenses, and download mechanism per dataset. Form-gated datasets (ScanNet/ScanNet++, Map-free, CMU-Seasons, Oxford-RobotCar, Tanks&Temples, nuScenes/RUBIK, MegaDepth-X) are listed there but not shipped.
-- [BENCHMARKS.md](BENCHMARKS.md) — canonical protocol per dataset (resize / RANSAC / metric) plus published reference scores from the literature (RoMa, LoFTR, LightGlue, SIFT-NN, RootSIFT, …) so visbench JSONs are paper-comparable.
+`--max-pairs` (or `--max-pairs-pose` / `--max-pairs-homography`) evaluates a
+seeded, scene-balanced subset. `batch` and `standard` skip a cell only when an
+existing result has the same schema, pair cap and seed; `--rerun` forces it.
+
+## Configuration
+
+| Variable | Effect |
+|---|---|
+| `VISBENCH_DATA_ROOT` | Base data directory (default `./datasets`). |
+| `VISBENCH_KEEP_CACHES=1` | Leave `HF_HOME` / `TORCH_HOME` alone instead of pointing them under the data root. |
+| `VISBENCH_ROMAXX_NUM_CORRESP` | Matches sampled from RoMaXX dense matchers (default 5000). |
+| `VISBENCH_LOMATRT_SIZE` | Input size LoMaTRT images are resized to; must match its built engines (default 512). |
+| `VISBENCH_STRICT_IMPORT=1` | Fail on any dataset module import error instead of warning. |
+
+On Windows keep the data root short: SatAst file names are about 150
+characters, and paths over 260 characters are invisible to most tools unless
+long paths are enabled.
+
+## Development
+
+```bash
+uv pip install -e .[dev]
+python -m pytest            # tests/ only (pyproject testpaths)
+ruff check visbench tests scripts
+```
+
+Real-data tests are opt-in: `VISBENCH_SMOKE=1 VISBENCH_DATA_ROOT=<root>` runs a
+two-pair smoke test per dataset present under the root, and
+`tests/test_real_pose_geometry.py` checks pose ground truth against SIFT
+epipolar error when the data is found.
+
+## Layout
+
+```text
+visbench/
+  core/            harness (eval_* per task), metrics, pair sampling, GT check, image IO
+  datasets/        pose/ correspondence/ homography/ crossmodal/ stress/
+  methods/         classical, vismatch passthrough, romaxx adapter
+  orchestrators/   run, batch, standard, report, check
+  reference_scores.json
+panels/            dataset and method lists
+```
 
 ## License
 
 BSD 3-Clause — see [LICENSE](LICENSE).
 
-The vendored `vismatch` submodule is BSD 3-Clause (Copyright 2024 Alex Stoken, Gabriele Berton). Each dataset has its own license; consult the source linked in `DATASETS.md` and in each dataset module's header docstring before redistributing data.
+The vendored `vismatch` submodule is BSD 3-Clause (Copyright 2024 Alex Stoken,
+Gabriele Berton). Each dataset has its own license; consult the source linked
+in `DATASETS.md` and in each dataset module's docstring before redistributing
+data.

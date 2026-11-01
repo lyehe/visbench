@@ -19,6 +19,19 @@ def _gray(img_u8: np.ndarray) -> np.ndarray:
     return img_u8
 
 
+_L1_EPS = 1e-12
+
+
+def _detect_and_describe_cv(feature, img_u8, empty_dim, empty_dtype):
+    """Shared body: gray-convert, detect+compute, normalize empty case."""
+    g = _gray(img_u8)
+    kp, desc = feature.detectAndCompute(g, None)
+    if desc is None or len(kp) == 0:
+        return np.empty((0, 2)), np.empty((0, empty_dim), dtype=empty_dtype)
+    pts = np.array([k.pt for k in kp], dtype=np.float32)
+    return pts, desc
+
+
 class SIFTFeature(CustomFeatureMatcher):
     descriptor_metric = "l2"
     ratio_test = 0.8
@@ -30,13 +43,21 @@ class SIFTFeature(CustomFeatureMatcher):
                                      contrastThreshold=contrast_threshold,
                                      edgeThreshold=edge_threshold)
 
+    def get_cv_feature(self):
+        return self._sift
+
     def detect_and_describe(self, img_u8):
-        g = _gray(img_u8)
-        kp, desc = self._sift.detectAndCompute(g, None)
-        if desc is None or len(kp) == 0:
-            return np.empty((0, 2)), np.empty((0, 128), dtype=np.float32)
-        pts = np.array([k.pt for k in kp], dtype=np.float32)
-        return pts, desc.astype(np.float32)
+        pts, desc = _detect_and_describe_cv(self._sift, img_u8, 128, np.float32)
+        return pts, desc.astype(np.float32) if len(desc) else desc
+
+
+def _rootsift_normalize(desc: np.ndarray) -> np.ndarray:
+    """L1-normalize then take sqrt (Arandjelovic & Zisserman 2012)."""
+    if len(desc) == 0:
+        return desc
+    d = desc.astype(np.float32)
+    d = d / np.maximum(d.sum(axis=1, keepdims=True), _L1_EPS)
+    return np.sqrt(d)
 
 
 class RootSIFTFeature(SIFTFeature):
@@ -44,10 +65,7 @@ class RootSIFTFeature(SIFTFeature):
 
     def detect_and_describe(self, img_u8):
         pts, desc = super().detect_and_describe(img_u8)
-        if len(desc):
-            desc = desc / np.maximum(desc.sum(axis=1, keepdims=True), 1e-12)
-            desc = np.sqrt(desc)
-        return pts, desc
+        return pts, _rootsift_normalize(desc)
 
 
 class ORBFeature(CustomFeatureMatcher):
@@ -59,13 +77,11 @@ class ORBFeature(CustomFeatureMatcher):
         super().__init__(device=device, **kwargs)
         self._orb = cv2.ORB_create(nfeatures=max_kpts, scaleFactor=scale_factor, nlevels=n_levels)
 
+    def get_cv_feature(self):
+        return self._orb
+
     def detect_and_describe(self, img_u8):
-        g = _gray(img_u8)
-        kp, desc = self._orb.detectAndCompute(g, None)
-        if desc is None or len(kp) == 0:
-            return np.empty((0, 2)), np.empty((0, 32), dtype=np.uint8)
-        pts = np.array([k.pt for k in kp], dtype=np.float32)
-        return pts, desc
+        return _detect_and_describe_cv(self._orb, img_u8, 32, np.uint8)
 
 
 class AKAZEFeature(CustomFeatureMatcher):
@@ -76,13 +92,11 @@ class AKAZEFeature(CustomFeatureMatcher):
         super().__init__(device=device, **kwargs)
         self._akaze = cv2.AKAZE_create(threshold=threshold)
 
+    def get_cv_feature(self):
+        return self._akaze
+
     def detect_and_describe(self, img_u8):
-        g = _gray(img_u8)
-        kp, desc = self._akaze.detectAndCompute(g, None)
-        if desc is None or len(kp) == 0:
-            return np.empty((0, 2)), np.empty((0, 61), dtype=np.uint8)
-        pts = np.array([k.pt for k in kp], dtype=np.float32)
-        return pts, desc
+        return _detect_and_describe_cv(self._akaze, img_u8, 61, np.uint8)
 
 
 class BRISKFeature(CustomFeatureMatcher):
@@ -93,13 +107,11 @@ class BRISKFeature(CustomFeatureMatcher):
         super().__init__(device=device, **kwargs)
         self._brisk = cv2.BRISK_create(thresh=threshold, octaves=octaves)
 
+    def get_cv_feature(self):
+        return self._brisk
+
     def detect_and_describe(self, img_u8):
-        g = _gray(img_u8)
-        kp, desc = self._brisk.detectAndCompute(g, None)
-        if desc is None or len(kp) == 0:
-            return np.empty((0, 2)), np.empty((0, 64), dtype=np.uint8)
-        pts = np.array([k.pt for k in kp], dtype=np.float32)
-        return pts, desc
+        return _detect_and_describe_cv(self._brisk, img_u8, 64, np.uint8)
 
 
 REGISTRY = {

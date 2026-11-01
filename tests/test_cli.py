@@ -24,6 +24,18 @@ def test_list_datasets_parses():
     assert args.kind == "datasets"
 
 
+def test_list_tasks_parses():
+    p = _build_parser()
+    args = p.parse_args(["list", "tasks"])
+    assert args.kind == "tasks"
+
+
+def test_list_rejects_unknown_kind():
+    p = _build_parser()
+    with pytest.raises(SystemExit):
+        p.parse_args(["list", "nonsense"])
+
+
 def test_download_parses():
     p = _build_parser()
     args = p.parse_args(["download", "hpatches"])

@@ -3,6 +3,9 @@
 import cv2
 import numpy as np
 
+from ._auc import auc_at_thresholds
+from ._constants import MIN_POSE_MATCHES, POSE_RANSAC_CONF
+
 
 def angle_error_mat(R1: np.ndarray, R2: np.ndarray) -> float:
     cos = (np.trace(R1.T @ R2) - 1) / 2
@@ -31,8 +34,8 @@ def compute_pose_error(R_est: np.ndarray, t_est: np.ndarray, R_gt: np.ndarray, t
 
 
 def estimate_pose_essential(kpts0: np.ndarray, kpts1: np.ndarray, K0: np.ndarray, K1: np.ndarray,
-                            norm_thresh: float, conf: float = 0.99999):
-    if len(kpts0) < 5:
+                            norm_thresh: float, conf: float = POSE_RANSAC_CONF):
+    if len(kpts0) < MIN_POSE_MATCHES:
         return None
     K0inv = np.linalg.inv(K0[:2, :2])
     K1inv = np.linalg.inv(K1[:2, :2])
@@ -52,16 +55,4 @@ def estimate_pose_essential(kpts0: np.ndarray, kpts1: np.ndarray, K0: np.ndarray
 
 
 def pose_auc(errors: np.ndarray, thresholds: list) -> list:
-    errors = np.asarray(errors)
-    sort_idx = np.argsort(errors)
-    errors = errors[sort_idx]
-    recall = (np.arange(len(errors)) + 1) / len(errors)
-    errors = np.r_[0.0, errors]
-    recall = np.r_[0.0, recall]
-    aucs = []
-    for t in thresholds:
-        last = np.searchsorted(errors, t)
-        r = np.r_[recall[:last], recall[last - 1] if last > 0 else 0.0]
-        e = np.r_[errors[:last], t]
-        aucs.append(float(np.trapezoid(r, x=e) / t))
-    return aucs
+    return auc_at_thresholds(errors, thresholds)

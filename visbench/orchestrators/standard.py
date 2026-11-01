@@ -11,13 +11,13 @@ Two execution modes:
 
 from __future__ import annotations
 
-import shlex
+import os
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .batch import run_batch
+from .batch import per_dataset_max_pairs, run_batch
 
 
 def _read_panel(path: Path) -> list[str]:
@@ -31,33 +31,18 @@ def _read_panel(path: Path) -> list[str]:
     return out
 
 
-def _per_dataset_max_pairs(datasets: list[str], pose: int | None,
-                           homography: int | None) -> dict:
-    from ..datasets import get as get_dataset_spec
-    out: dict[str, int] = {}
-    for ds in datasets:
-        try:
-            spec = get_dataset_spec(ds)
-        except KeyError:
-            continue
-        if spec.task == "pose" and pose is not None:
-            out[ds] = pose
-        elif spec.task in ("homography", "correspondence", "fundamental") and homography is not None:
-            out[ds] = homography
-    return out
-
-
 def run_standard(panel_path: Path, methods_path: Path, out_dir: Path,
                  data_root_default: Path, *,
                  max_pairs_pose: int | None = None,
                  max_pairs_homography: int | None = None,
                  ransac_runs: int = 5,
                  device: str = "cpu",
-                 skip_existing: bool = True) -> None:
+                 skip_existing: bool = True,
+                 seed: int | None = 0) -> None:
     """Sequential execution: one method at a time, in-process."""
     datasets = _read_panel(Path(panel_path))
     methods = _read_panel(Path(methods_path))
-    max_pairs = _per_dataset_max_pairs(datasets, max_pairs_pose, max_pairs_homography)
+    max_pairs = per_dataset_max_pairs(datasets, max_pairs_pose, max_pairs_homography)
 
     for method in methods:
         run_batch(
@@ -69,6 +54,7 @@ def run_standard(panel_path: Path, methods_path: Path, out_dir: Path,
             ransac_runs=ransac_runs,
             device=device,
             skip_existing=skip_existing,
+            seed=seed,
         )
 
 
@@ -80,6 +66,7 @@ def run_standard_parallel(panel_path: Path, methods_path: Path, out_dir: Path,
                           ransac_runs: int = 5,
                           per_method_timeout: float | None = None,
                           skip_existing: bool = True,
+                          seed: int | None = 0,
                           python_exe: str | None = None) -> None:
     """Parallel execution: one subprocess per method, distributed round-robin
     across `devices`. Each subprocess is `python -m visbench batch ...`."""
@@ -107,13 +94,16 @@ def run_standard_parallel(panel_path: Path, methods_path: Path, out_dir: Path,
             "--ransac-runs", str(ransac_runs),
             "--device", device,
         ]
-        if max_pairs_pose is not None or max_pairs_homography is not None:
-            # `visbench batch` accepts a single --max-pairs; use the smaller of
-            # the two so neither task overruns its budget.
-            mp = min(x for x in (max_pairs_pose, max_pairs_homography) if x is not None)
-            argv += ["--max-pairs", str(mp)]
+        # Per-task caps are forwarded separately; a single shared cap used to
+        # shrink pose datasets to the homography budget (or vice versa).
+        if max_pairs_pose is not None:
+            argv += ["--max-pairs-pose", str(max_pairs_pose)]
+        if max_pairs_homography is not None:
+            argv += ["--max-pairs-homography", str(max_pairs_homography)]
         if not skip_existing:
             argv += ["--no-skip"]
+        if seed is not None:
+            argv += ["--seed", str(seed)]
         commands.append((method, device, argv))
 
     print(f"[standard-parallel] {len(methods)} methods x {len(datasets)} datasets "
@@ -121,12 +111,35 @@ def run_standard_parallel(panel_path: Path, methods_path: Path, out_dir: Path,
 
     def _run_one(m_d_argv):
         method, device, argv = m_d_argv
+        # Create a new process group / job so we can take down any worker
+        # processes the child spawns (DataLoader pools, NCCL helpers, etc.) on
+        # timeout — `subprocess.run(timeout=...)` only kills the immediate
+        # child, leaving orphans holding VRAM.
+        popen_kw: dict = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if os.name == "nt":
+            popen_kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            popen_kw["start_new_session"] = True
+        proc = subprocess.Popen(argv, **popen_kw)
         try:
-            r = subprocess.run(argv, timeout=per_method_timeout,
-                               capture_output=True, text=True)
-            return method, device, r.returncode, r.stdout, r.stderr
+            stdout, stderr = proc.communicate(timeout=per_method_timeout)
+            return method, device, proc.returncode, stdout, stderr
         except subprocess.TimeoutExpired:
-            return method, device, -1, "", f"TIMEOUT after {per_method_timeout}s"
+            if os.name == "nt":
+                proc.kill()
+            else:
+                import signal
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except (ProcessLookupError, PermissionError):
+                    proc.kill()
+            try:
+                stdout, stderr = proc.communicate(timeout=5)
+            except subprocess.TimeoutExpired:
+                stdout, stderr = "", ""
+            tail = (stderr or "").strip().splitlines()[-3:]
+            return method, device, -1, stdout, \
+                f"TIMEOUT after {per_method_timeout}s\n" + "\n".join(tail)
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
         futures = {ex.submit(_run_one, cmd): cmd[0] for cmd in commands}
@@ -137,5 +150,5 @@ def run_standard_parallel(panel_path: Path, methods_path: Path, out_dir: Path,
             if rc != 0 and stderr:
                 # Surface the last few lines of stderr for diagnosis.
                 tail = "\n".join(stderr.strip().splitlines()[-6:])
-                print(f"  stderr tail:\n    " + tail.replace("\n", "\n    "),
+                print("  stderr tail:\n    " + tail.replace("\n", "\n    "),
                       file=sys.stderr)

@@ -1,0 +1,8 @@
+# RoMaXX matchers (optional; install romaxx in the same environment).
+# FlexGlueTRT takes an engine bundle directory: romaxx:flexglue-trt:<dir>
+romaxx:romatrt:fast
+romaxx:minimaromatrt:fast
+romaxx:lomatrt:loma_B128
+romaxx:lomatrt:loma_G
+romaxx:flexglue:core
+romaxx:flexglue:refined

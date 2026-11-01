@@ -1,9 +1,14 @@
-# Curated SOTA via vismatch passthrough. Edit to taste; consult
-# `python -m visbench list methods` for available names.
+# Learned matchers via the vismatch passthrough (`visbench list methods`).
 vismatch:superpoint-lightglue
-vismatch:disk-lightglue
 vismatch:aliked-lightglue
-vismatch:sift-lightglue
+vismatch:disk-lightglue
 vismatch:loftr
-vismatch:roma_outdoor
-vismatch:dedode
+vismatch:eloftr
+vismatch:roma
+vismatch:romav2
+vismatch:loma-b128
+vismatch:loma-b
+vismatch:loma-l
+vismatch:loma-g
+vismatch:master
+vismatch:ufm

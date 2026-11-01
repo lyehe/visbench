@@ -6,7 +6,7 @@ from visbench.core.metrics.pose import (
     angle_error_mat, angle_error_vec, compute_pose_error, pose_auc,
 )
 from visbench.core.metrics.homography import (
-    estimate_homography, homography_corner_error, hpatches_auc,
+    estimate_homography, homography_corner_error,
 )
 from visbench.core.metrics.classical import (
     mma_homography, repeatability, warp_points,

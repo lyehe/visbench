@@ -1,13 +1,14 @@
 """visbench CLI dispatch.
 
 Subcommands:
-  list datasets          show registered datasets (name, task, default_root)
-  list methods           show registered methods + (if vismatch installed) vismatch matchers
-  download <name|--all>  download / prepare a dataset
-  run                    one (dataset, method) cell
-  batch                  one method, many datasets
-  standard               panel-based (datasets x methods) sweep
-  report                 aggregate per-cell JSONs into ranking tables
+  list {datasets|methods|tasks}  show registered datasets / methods / known tasks
+  download <name|--all-auto>     download / prepare a dataset (--all-auto for every
+                                 dataset whose download() is automatic)
+  run                            one (dataset, method) cell
+  batch                          one method, many datasets
+  standard                       panel-based (datasets x methods) sweep
+  report                         aggregate per-cell JSONs into ranking tables
+  check <dataset>                CPU sanity check of a loader's ground truth on real data
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from pathlib import Path
 
 
 def _default_data_root() -> Path:
-    """Where datasets live by default. Configurable via VISBENCH_DATA_ROOT."""
+    """Where datasets live by default: $VISBENCH_DATA_ROOT, else ./datasets."""
     env = os.environ.get("VISBENCH_DATA_ROOT")
     if env:
         return Path(env)
@@ -28,6 +29,13 @@ def _default_data_root() -> Path:
 
 
 def _setup_caches(data_root: Path) -> None:
+    """Point model/HF caches under the data root unless the user set them.
+
+    Set VISBENCH_KEEP_CACHES=1 to leave HF_HOME / TORCH_HOME untouched (useful
+    when the data root is a shared, read-mostly store).
+    """
+    if os.environ.get("VISBENCH_KEEP_CACHES") == "1":
+        return
     cache_root = data_root / "_cache"
     os.environ.setdefault("HF_HOME", str(cache_root / "hf"))
     os.environ.setdefault("HF_HUB_CACHE", str(cache_root / "hf" / "hub"))
@@ -58,8 +66,14 @@ def _cmd_list(args):
         else:
             for n in names:
                 print(f"  {n}")
+    elif args.kind == "tasks":
+        from .orchestrators.run import known_tasks
+        from .core.pair_schema import REQUIRED_KEYS_BY_TASK
+        for t in known_tasks():
+            keys = REQUIRED_KEYS_BY_TASK.get(t, ())
+            print(f"  {t:<16} required pair keys: {', '.join(keys)}")
     else:
-        raise SystemExit("Usage: visbench list {datasets|methods}")
+        raise SystemExit("Usage: visbench list {datasets|methods|tasks}")
 
 
 def _cmd_download(args):
@@ -116,6 +130,7 @@ def _cmd_run(args):
         ransac_runs=args.ransac_runs, device=device,
         out=Path(args.out) if args.out else None,
         progress=not args.no_progress,
+        seed=args.seed,
     )
     print(json.dumps(record, indent=2))
 
@@ -131,10 +146,11 @@ def _cmd_batch(args):
     datasets = [s.strip() for s in args.datasets.split(",") if s.strip()]
     device = args.device or _default_device()
 
-    mp = {}
+    from .orchestrators.batch import per_dataset_max_pairs
     if args.max_pairs is not None:
-        for ds in datasets:
-            mp[ds] = args.max_pairs
+        mp = {ds: args.max_pairs for ds in datasets}
+    else:
+        mp = per_dataset_max_pairs(datasets, args.max_pairs_pose, args.max_pairs_homography)
 
     run_batch(
         method=args.method, datasets=datasets,
@@ -142,6 +158,7 @@ def _cmd_batch(args):
         data_root_default=data_root_default,
         max_pairs=mp, ransac_runs=args.ransac_runs, device=device,
         skip_existing=not args.no_skip,
+        seed=args.seed,
     )
 
 
@@ -167,6 +184,7 @@ def _cmd_standard(args):
             ransac_runs=args.ransac_runs,
             per_method_timeout=args.per_method_timeout,
             skip_existing=not args.no_skip,
+            seed=args.seed,
         )
         return
 
@@ -178,13 +196,34 @@ def _cmd_standard(args):
         max_pairs_homography=args.max_pairs_homography,
         ransac_runs=args.ransac_runs, device=device,
         skip_existing=not args.no_skip,
+        seed=args.seed,
     )
 
 
 def _cmd_report(args):
     from .orchestrators.reporting import report
-    report(Path(args.results_dir), top_k=args.top_k,
-           show_reference=not args.no_reference)
+    panel = None
+    if args.panel:
+        from .orchestrators.standard import _read_panel
+        panel = _read_panel(_resolve_panel(args.panel))
+    report(Path(args.results_dir), top_k=args.top_k, panel=panel,
+           show_reference=not args.no_reference,
+           json_out=Path(args.json_out) if args.json_out else None,
+           matrix_metric=args.matrix_metric)
+
+
+def _cmd_check(args):
+    from . import datasets as _ds_pkg  # noqa: F401
+    from .datasets import get as ds_get
+    from .orchestrators.check import check_dataset
+
+    base = Path(args.data_root_default) if args.data_root_default else _default_data_root()
+    ok = True
+    for name in args.names:
+        root = Path(args.data_root) if args.data_root else base / ds_get(name).default_root
+        ok &= check_dataset(name, root, n_pairs=args.pairs, seed=args.seed)
+    if not ok:
+        raise SystemExit(1)
 
 
 def _resolve_panel(name_or_path: str) -> Path:
@@ -214,44 +253,76 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # list
-    pl = sub.add_parser("list", help="List datasets or methods")
-    pl.add_argument("kind", choices=["datasets", "methods"])
+    pl = sub.add_parser("list", help="List datasets, methods, or tasks")
+    pl.add_argument("kind", choices=["datasets", "methods", "tasks"])
     pl.set_defaults(func=_cmd_list)
 
     # download
     pd = sub.add_parser("download", help="Download / prepare a dataset")
-    pd.add_argument("name", nargs="?")
+    pd.add_argument("name", nargs="?", help="Dataset name (see `visbench list datasets`).")
     pd.add_argument("--all-auto", action="store_true",
                     help="Try every dataset's download() (skips on NotImplementedError).")
-    pd.add_argument("--data-root", default=None)
+    pd.add_argument("--data-root", default=None,
+                    help="Override the default data root (default: $VISBENCH_DATA_ROOT, else ./datasets/).")
     pd.set_defaults(func=_cmd_download)
 
     # run
     pr = sub.add_parser("run", help="Run one (dataset, method) cell")
-    pr.add_argument("--dataset", required=True)
+    pr.add_argument("--dataset", required=True,
+                    help="Dataset name (see `visbench list datasets`).")
     pr.add_argument("--method", required=True,
                     help="Method name; e.g. 'sift', 'rootsift', 'vismatch:lightglue'.")
-    pr.add_argument("--data-root", default=None)
-    pr.add_argument("--data-root-default", default=None)
-    pr.add_argument("--max-pairs", type=int, default=None)
-    pr.add_argument("--resize", type=int, default=None)
-    pr.add_argument("--ransac-runs", type=int, default=5)
-    pr.add_argument("--device", default=None)
-    pr.add_argument("--out", default=None)
-    pr.add_argument("--no-progress", action="store_true")
+    pr.add_argument("--data-root", default=None,
+                    help="Override the dataset's data root entirely (skips spec.default_root).")
+    pr.add_argument("--data-root-default", default=None,
+                    help="Base directory under which dataset.default_root lives "
+                    "(default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    pr.add_argument("--max-pairs", type=int, default=None,
+                    help="Cap pairs evaluated (default: full dataset).")
+    pr.add_argument("--resize", type=int, default=None,
+                    help="Long-side resize (default: dataset's canonical value).")
+    pr.add_argument("--ransac-runs", type=int, default=5,
+                    help="Number of RANSAC shuffles for pose (default: 5).")
+    pr.add_argument("--device", default=None,
+                    help="Torch device ('cpu', 'cuda', 'cuda:0', ...). "
+                    "Default: vismatch.get_default_device() or auto.")
+    pr.add_argument("--out", default=None,
+                    help="Write per-cell JSON to this path (in addition to stdout).")
+    pr.add_argument("--no-progress", "--quiet", dest="no_progress",
+                    action="store_true",
+                    help="Suppress the tqdm progress bar.")
+    pr.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for ransac-shuffle reproducibility (default 0; "
+                    "use a different int to vary shuffles).")
     pr.set_defaults(func=_cmd_run)
 
     # batch
     pb = sub.add_parser("batch", help="Run one method across many datasets in one process")
-    pb.add_argument("--method", required=True)
-    pb.add_argument("--datasets", required=True, help="Comma-separated dataset names.")
-    pb.add_argument("--out-dir", required=True)
-    pb.add_argument("--data-root-default", default=None)
-    pb.add_argument("--max-pairs", type=int, default=None)
-    pb.add_argument("--ransac-runs", type=int, default=5)
-    pb.add_argument("--device", default=None)
-    pb.add_argument("--no-skip", action="store_true",
+    pb.add_argument("--method", required=True,
+                    help="Method name (e.g. 'sift', 'vismatch:lightglue').")
+    pb.add_argument("--datasets", required=True,
+                    help="Comma-separated dataset names.")
+    pb.add_argument("--out-dir", required=True,
+                    help="Directory to write per-cell JSON files (one per (dataset,method)).")
+    pb.add_argument("--data-root-default", default=None,
+                    help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    pb.add_argument("--max-pairs", type=int, default=None,
+                    help="Apply the same per-dataset cap (default: full datasets).")
+    pb.add_argument("--max-pairs-pose", type=int, default=None,
+                    help="Cap pairs on pose-task datasets (ignored when --max-pairs is set).")
+    pb.add_argument("--max-pairs-homography", type=int, default=None,
+                    help="Cap pairs on homography/correspondence/fundamental datasets "
+                    "(ignored when --max-pairs is set).")
+    pb.add_argument("--ransac-runs", type=int, default=5,
+                    help="Number of RANSAC shuffles for pose datasets (default: 5).")
+    pb.add_argument("--device", default=None,
+                    help="Torch device. Default: auto.")
+    # Negative `--no-skip` kept for backward compat; `--rerun` is the modern
+    # positive equivalent. Both map to the same flag value.
+    pb.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
                     help="Re-run cells even if their JSON already exists.")
+    pb.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for reproducibility (default 0); recorded in each cell JSON.")
     pb.set_defaults(func=_cmd_batch)
 
     # standard
@@ -260,28 +331,58 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="Panel name ('core', 'extended') or path to a .txt of dataset names.")
     ps.add_argument("--methods", required=True,
                     help="Path to a .txt of method names (one per line).")
-    ps.add_argument("--out-dir", required=True)
-    ps.add_argument("--data-root-default", default=None)
-    ps.add_argument("--max-pairs-pose", type=int, default=None)
-    ps.add_argument("--max-pairs-homography", type=int, default=None)
-    ps.add_argument("--ransac-runs", type=int, default=5)
+    ps.add_argument("--out-dir", required=True,
+                    help="Directory to write per-cell JSON files.")
+    ps.add_argument("--data-root-default", default=None,
+                    help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    ps.add_argument("--max-pairs-pose", type=int, default=None,
+                    help="Cap pairs on pose-task datasets (default: full).")
+    ps.add_argument("--max-pairs-homography", type=int, default=None,
+                    help="Cap pairs on homography/correspondence/fundamental "
+                    "datasets (default: full).")
+    ps.add_argument("--ransac-runs", type=int, default=5,
+                    help="Number of RANSAC shuffles for pose datasets (default: 5).")
     ps.add_argument("--device", default=None,
                     help="Single device for sequential mode (ignored when --devices is set).")
     ps.add_argument("--devices", default=None,
                     help="Comma-separated device list (e.g. 'cuda:0,cuda:1,cpu') for parallel "
                     "subprocess execution; one method per device, round-robin.")
     ps.add_argument("--per-method-timeout", type=float, default=None,
-                    help="Timeout (seconds) per method subprocess in parallel mode.")
-    ps.add_argument("--no-skip", action="store_true")
+                    help="Timeout (seconds) per method subprocess in parallel mode. "
+                    "Children are killed on timeout to avoid orphan GPU processes.")
+    ps.add_argument("--no-skip", "--rerun", dest="no_skip", action="store_true",
+                    help="Re-run cells even if their JSON already exists.")
+    ps.add_argument("--seed", type=int, default=0,
+                    help="RNG seed for reproducibility (default 0); applied to every cell.")
     ps.set_defaults(func=_cmd_standard)
 
     # report
     prp = sub.add_parser("report", help="Aggregate JSONs into ranking tables")
-    prp.add_argument("--results-dir", required=True)
-    prp.add_argument("--top-k", type=int, default=25)
-    prp.add_argument("--no-reference", action="store_true",
+    prp.add_argument("--results-dir", required=True,
+                     help="Directory containing per-cell JSONs written by `visbench run` / batch / standard.")
+    prp.add_argument("--top-k", type=int, default=25,
+                     help="Show only the top K methods per dataset (default: 25).")
+    prp.add_argument("--no-reference", "--hide-reference",
+                     dest="no_reference", action="store_true",
                      help="Suppress 'ref:' rows from reference_scores.json.")
+    prp.add_argument("--json-out", default=None,
+                     help="Write the aggregated report as JSON to this path "
+                     "(in addition to printing the table to stdout).")
+    prp.add_argument("--panel", default=None,
+                     help="Panel name or .txt of datasets to report, in order "
+                     "(default: panels/core.txt datasets present, else all).")
+    prp.add_argument("--matrix-metric", default=None,
+                     help="Metric key for every matrix cell (default: each dataset's ranking metric).")
     prp.set_defaults(func=_cmd_report)
+
+    pc = sub.add_parser("check", help="Sanity-check a loader's ground truth on real data (CPU)")
+    pc.add_argument("names", nargs="+", help="Dataset name(s).")
+    pc.add_argument("--pairs", type=int, default=8, help="Scene-balanced pairs to check (default 8).")
+    pc.add_argument("--data-root", default=None, help="Exact data directory (single dataset).")
+    pc.add_argument("--data-root-default", default=None,
+                    help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    pc.add_argument("--seed", type=int, default=0, help="Pair-sampling seed (default 0).")
+    pc.set_defaults(func=_cmd_check)
 
     return p
 

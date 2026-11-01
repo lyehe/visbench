@@ -63,36 +63,69 @@ def _identical_pair():
     }]
 
 
-def test_dispatch_unknown_task_falls_back_to_qualitative(monkeypatch):
+def _identical_pair_with_real_image(tmp_path):
+    """Like _identical_pair() but writes an actual image file so PIL.Image.open
+    succeeds — needed since _qualitative_sweep now goes through the same
+    aspect-preserving resize as the other eval_* paths."""
+    from PIL import Image
+    p = tmp_path / "stub.png"
+    Image.new("RGB", (32, 32)).save(p)
+    pair = dict(_identical_pair()[0])
+    pair["im_A_path"] = str(p)
+    pair["im_B_path"] = str(p)
+    return [pair]
+
+
+def test_dispatch_unknown_task_falls_back_to_qualitative(tmp_path):
     """An unrecognised task degrades gracefully to a qualitative sweep."""
     matcher = StubMatcher()
-    # _qualitative_sweep reads pair["im_A_path"] via matcher.load_image; our
-    # StubMatcher returns dummy tensors so we don't need real files.
-    res = _evaluate("not_a_real_task", matcher, _identical_pair(),
-                    resize_long=64, ransac_runs=1, progress=False)
-    # Qualitative sweep keys
+    res = _evaluate("not_a_real_task", matcher,
+                    _identical_pair_with_real_image(tmp_path),
+                    resize_long=64, ransac_runs=1, progress=False, seed=0)
     for k in ("mean_time_s", "mean_matches", "num_pairs"):
         assert k in res
     json.dumps(res)  # must be JSON-serialisable
 
 
-def test_qualitative_returns_serializable_dict():
+def test_qualitative_returns_serializable_dict(tmp_path):
     matcher = StubMatcher()
-    res = _qualitative_sweep(matcher, _identical_pair(), resize_long=32)
+    res = _qualitative_sweep(matcher, _identical_pair_with_real_image(tmp_path),
+                             resize_long=32)
     json.dumps(res)
     assert res["num_pairs"] == 1
 
 
-def test_eval_fundamental_pairs_handles_empty_iter():
-    """No pairs → returns dict (no crash). Validates the function signature."""
+def test_dispatch_forwards_only_accepted_kwargs(tmp_path):
+    """_evaluate filters kwargs by each eval fn's signature, so non-pose
+    tasks don't get spammed with seed/ransac_runs (was previously hidden
+    by 6 identical wrapper lambdas)."""
+    from visbench.orchestrators.run import _TASK_DISPATCH, _accepted_kwargs
+    # Pose accepts seed + ransac_runs; homography accepts neither.
+    pose_kw = _accepted_kwargs(_TASK_DISPATCH["pose"])
+    homog_kw = _accepted_kwargs(_TASK_DISPATCH["homography"])
+    assert "seed" in pose_kw
+    assert "ransac_runs" in pose_kw
+    assert "seed" not in homog_kw
+    assert "ransac_runs" not in homog_kw
+
+
+def test_qualitative_warns_on_pair_failure(tmp_path):
+    """Regression: _qualitative_sweep used to silently swallow per-pair
+    exceptions; now it emits the same UserWarning the eval_*_pairs paths do."""
     import warnings
-    matcher = StubMatcher()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # zero-pairs warning
-        res = eval_fundamental_pairs(matcher, iter([]), resize_long=None, progress=False)
-    json.dumps(res)
-    assert res["num_pair_failures"] == 0
-    assert res["mean_matches"] == 0.0
+
+    class CrashingMatcher(StubMatcher):
+        def __call__(self, img0, img1):
+            raise RuntimeError("simulated matcher crash")
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        res = _qualitative_sweep(CrashingMatcher(),
+                                 _identical_pair_with_real_image(tmp_path),
+                                 resize_long=32)
+    assert res["num_pair_failures"] == 1
+    assert any("_qualitative_sweep" in str(w.message) for w in caught), \
+        f"expected per-pair warning, got: {[str(w.message) for w in caught]}"
 
 
 @pytest.mark.parametrize("eval_fn", [
@@ -102,22 +135,19 @@ def test_eval_fundamental_pairs_handles_empty_iter():
     eval_descriptor_pairs,
     eval_fundamental_pairs,
 ])
-def test_each_eval_handles_empty_iter(eval_fn):
-    """Every task-level eval function must tolerate an empty iterator."""
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = eval_fn(StubMatcher(), iter([]), progress=False)
-    json.dumps(res)
-    assert isinstance(res, dict)
+def test_each_eval_rejects_empty_iter(eval_fn):
+    """Zero pairs means missing data or a bad layout, never a score of 0."""
+    from visbench.core.sampling import EmptyPairsError
+    with pytest.raises(EmptyPairsError):
+        eval_fn(StubMatcher(), iter([]), progress=False)
 
 
 def test_every_registered_dataset_has_a_dispatcher_path():
     """Sanity: every dataset's task is one the dispatcher knows about
     OR will fall through to the qualitative fallback."""
     from visbench.datasets import available, get
-    known = {"pose", "homography", "correspondence", "fundamental",
-             "descriptor", "qualitative"}
+    from visbench._tasks import TASKS
+    known = set(TASKS)
     unknown_tasks = set()
     for n in available():
         spec = get(n)

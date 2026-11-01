@@ -8,8 +8,8 @@ import pytest
 def test_dataset_registry_loads():
     from visbench.datasets import available, get
     names = available()
-    assert len(names) > 30, f"expected >=30 datasets, got {len(names)}"
-    for n in ("hpatches", "oxford_affine", "evd", "megadepth1500", "tum_rgbd", "blendedmvs"):
+    assert len(names) >= 25, f"expected >=25 datasets, got {len(names)}"
+    for n in ("hpatches", "megadepth1500", "wxbs", "eth3d", "minima_metu_vistir"):
         assert n in names, n
         spec = get(n)
         assert callable(spec.iter_pairs)

@@ -159,7 +159,8 @@ def write_marker(marker: Path, content: str = "ok") -> None:
 
 def copytree_into(src: Path, dst: Path) -> None:
     """Merge `src` directory contents into existing `dst`."""
-    src = Path(src); dst = Path(dst)
+    src = Path(src)
+    dst = Path(dst)
     _ensure_dir(dst)
     for p in src.iterdir():
         target = dst / p.name
