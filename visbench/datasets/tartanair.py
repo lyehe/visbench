@@ -58,8 +58,8 @@ def download(data_root: Path | str) -> Path:
       VISBENCH_TARTANAIR_TRAJ         comma-separated trajectories (default: 'P000')
     """
     data_root = Path(data_root)
-    if any(data_root.glob("*/Easy/P*/image_left/*.png")) or \
-       any(data_root.glob("*/Hard/P*/image_left/*.png")):
+    if any(any(data_root.glob(f"*/{d}/P*/image_left/*.{ext}"))  # frames may be converted to JPEG
+           for d in ("Easy", "Hard") for ext in ("png", "jpg")):
         return data_root
     envs = tuple(s.strip() for s in os.environ.get(
         "VISBENCH_TARTANAIR_ENVS", ",".join(_DEFAULT_ENVS)).split(",") if s.strip())
@@ -86,6 +86,9 @@ def _q_to_R(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
     ], dtype=np.float64)
 
 
+_NED_TO_CV = np.array([[0.0, 1.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]])
+
+
 def _parse_poses(p: Path) -> list[tuple[np.ndarray, np.ndarray]]:
     """pose_left.txt: each line `tx ty tz qx qy qz qw` — camera-to-world (NED)."""
     out = []
@@ -96,6 +99,9 @@ def _parse_poses(p: Path) -> list[tuple[np.ndarray, np.ndarray]]:
         tx, ty, tz, qx, qy, qz, qw = (float(x) for x in toks[:7])
         R_wc = _q_to_R(qx, qy, qz, qw)
         t_wc = np.array([tx, ty, tz], dtype=np.float64)
+        # NED body (x fwd, y right, z down) -> OpenCV camera (x right, y down, z fwd),
+        # applied on both sides like c2w_cv = P @ c2w_ned @ P.T.
+        R_wc, t_wc = _NED_TO_CV @ R_wc @ _NED_TO_CV.T, _NED_TO_CV @ t_wc
         # camera-from-world (what compute_relative_pose expects).
         R_cw, t_cw = R_wc.T, -R_wc.T @ t_wc
         out.append((R_cw, t_cw))
@@ -120,7 +126,10 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
                 if not (pose_file.exists() and img_dir.exists()):
                     continue
                 poses = _parse_poses(pose_file)
-                frames = sorted(img_dir.glob("*.png"))
+                # One file per frame stem; prefer the JPEG q90 conversion if both exist.
+                by_stem = {p.stem: p for p in img_dir.glob("*.png")}
+                by_stem.update({p.stem: p for p in img_dir.glob("*.jpg")})
+                frames = [by_stem[s] for s in sorted(by_stem)]
                 if len(frames) < 2 or len(poses) != len(frames):
                     continue
                 for i in range(0, len(frames) - pair_skip, max(1, pair_skip // 2)):

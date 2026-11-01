@@ -19,15 +19,25 @@ import sys
 from pathlib import Path
 
 
+# Shared training-data store on the lab workstation; used when ./datasets is absent.
+_MATCHER_TRAINING_ROOT = Path(r"D:\Yehe\matcher_training")
+
+
 def _default_data_root() -> Path:
-    """Where datasets live by default. Configurable via VISBENCH_DATA_ROOT."""
+    """Where datasets live by default: $VISBENCH_DATA_ROOT, else ./datasets, else
+    D:\\Yehe\\matcher_training when ./datasets is missing and that store exists."""
     env = os.environ.get("VISBENCH_DATA_ROOT")
     if env:
         return Path(env)
-    return Path.cwd() / "datasets"
+    local = Path.cwd() / "datasets"
+    if not local.exists() and _MATCHER_TRAINING_ROOT.is_dir():
+        return _MATCHER_TRAINING_ROOT
+    return local
 
 
 def _setup_caches(data_root: Path) -> None:
+    if data_root == _MATCHER_TRAINING_ROOT:
+        return  # shared data store: keep the user's default HF/torch caches, write nothing there
     cache_root = data_root / "_cache"
     os.environ.setdefault("HF_HOME", str(cache_root / "hf"))
     os.environ.setdefault("HF_HUB_CACHE", str(cache_root / "hf" / "hub"))
@@ -235,7 +245,7 @@ def _build_parser() -> argparse.ArgumentParser:
     pd.add_argument("--all-auto", action="store_true",
                     help="Try every dataset's download() (skips on NotImplementedError).")
     pd.add_argument("--data-root", default=None,
-                    help="Override the default data root (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+                    help="Override the default data root (default: $VISBENCH_DATA_ROOT, else ./datasets/, else D:/Yehe/matcher_training).")
     pd.set_defaults(func=_cmd_download)
 
     # run

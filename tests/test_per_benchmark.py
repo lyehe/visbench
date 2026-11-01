@@ -179,15 +179,20 @@ from visbench.core.pair_schema import REQUIRED_KEYS_BY_TASK as _PAIR_KEYS_BY_TAS
 def test_iter_pairs_yields_well_formed_pairs(name):
     """If real data is on disk, the first 2 pairs should have all keys their task requires."""
     spec = get(name)
-    data_root_default = Path(os.environ.get("VISBENCH_DATA_ROOT", Path.cwd() / "datasets"))
-    data_root = data_root_default / spec.default_root
+    from visbench.__main__ import _default_data_root
+    data_root = _default_data_root() / spec.default_root
     if not data_root.exists():
         pytest.skip(f"{name}: data not on disk at {data_root}")
 
     kwargs = dict(spec.kwargs or {})
     required = _PAIR_KEYS_BY_TASK[spec.task]
     yielded = 0
-    for pair in spec.iter_pairs(data_root, max_pairs=2, **kwargs):
+    pairs = iter(spec.iter_pairs(data_root, max_pairs=2, **kwargs))
+    try:
+        first = next(pairs, None)
+    except FileNotFoundError as e:  # root exists but this subset was never ingested
+        pytest.skip(f"{name}: {e}")
+    for pair in ([first] if first is not None else []) + list(pairs):
         for key in required:
             assert key in pair, f"{name}: yielded pair missing required key '{key}'"
         # Path strings should point at files that exist.

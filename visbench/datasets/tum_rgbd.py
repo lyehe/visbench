@@ -24,6 +24,11 @@ K_FR1 = np.array([[517.3, 0, 318.6], [0, 516.5, 255.3], [0, 0, 1.0]], dtype=np.f
 K_FR2 = np.array([[520.9, 0, 325.1], [0, 521.0, 249.7], [0, 0, 1.0]], dtype=np.float64)
 K_FR3 = np.array([[535.4, 0, 320.1], [0, 539.2, 247.6], [0, 0, 1.0]], dtype=np.float64)
 
+# Max |t_rgb - t_gt| when associating a frame to a GT pose (TUM associate.py default 0.02 s).
+# GT trajectories have mocap dropouts (freiburg2_desk: 12 s gap at 195.6-207.6 s); frames
+# inside a gap have no valid pose and must not snap to a distant one.
+MAX_ASSOC_DT = 0.02
+
 
 def download(data_root: Path | str) -> Path:
     data_root = Path(data_root)
@@ -62,7 +67,8 @@ def _parse_groundtruth(p: Path) -> list[tuple]:
     return rows
 
 
-def _nearest(rows: list, ts: float):
+def _nearest(rows: list, ts: float, max_dt: float = MAX_ASSOC_DT):
+    """GT row closest in time to ``ts``, or None if none lies within ``max_dt`` seconds."""
     lo, hi = 0, len(rows) - 1
     while lo < hi - 1:
         mid = (lo + hi) // 2
@@ -71,7 +77,8 @@ def _nearest(rows: list, ts: float):
         else:
             hi = mid
     a, b = rows[lo], rows[hi]
-    return a if abs(a[0] - ts) < abs(b[0] - ts) else b
+    best = a if abs(a[0] - ts) < abs(b[0] - ts) else b
+    return best if abs(best[0] - ts) <= max_dt else None
 
 
 def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
@@ -99,8 +106,11 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None,
                 j += 1
             if j >= len(frames):
                 continue
-            _, R0_wc, t0_wc = _nearest(rows, t_i)
-            _, R1_wc, t1_wc = _nearest(rows, ts_all[j])
+            g0, g1 = _nearest(rows, t_i), _nearest(rows, ts_all[j])
+            if g0 is None or g1 is None:  # no GT pose close in time (mocap gap)
+                continue
+            _, R0_wc, t0_wc = g0
+            _, R1_wc, t1_wc = g1
             R0, t0 = R0_wc.T, -R0_wc.T @ t0_wc
             R1, t1 = R1_wc.T, -R1_wc.T @ t1_wc
             R, t = compute_relative_pose(R0, t0, R1, t1)
