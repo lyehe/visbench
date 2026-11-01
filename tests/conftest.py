@@ -16,8 +16,16 @@ import sys
 import types
 
 
+def _importable(name: str) -> bool:
+    try:
+        __import__(name)
+    except ImportError:
+        return False
+    return True
+
+
 def _stub_torch() -> None:
-    if "torch" in sys.modules:
+    if "torch" in sys.modules or _importable("torch"):
         return
     t = types.ModuleType("torch")
 
@@ -29,7 +37,7 @@ def _stub_torch() -> None:
 
 
 def _stub_vismatch() -> None:
-    if "vismatch" in sys.modules:
+    if "vismatch" in sys.modules or _importable("vismatch"):
         return
     vm = types.ModuleType("vismatch")
     vm.available_models = []

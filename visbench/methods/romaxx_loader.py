@@ -8,7 +8,8 @@ RoMaXX is not a visbench dependency; install it into the same environment
 ``romaxx:flexglue-trt:<dir>`` FlexGlueTRT from a built or released engine bundle directory
 ``romaxx:romatrt:<setting>``  RoMaTRT (turbo / fast / base / precise)
 ``romaxx:minimaromatrt:<s>``  MinimaRoMaTRT (A->B only)
-``romaxx:lomatrt:<preset>``   LoMaTRT (loma_B128 / loma_B / loma_L / loma_G / loma_R)
+``romaxx:lomatrt:<preset>``   LoMaTRT (loma_B128 / loma_B / loma_L / loma_G / loma_R); images are
+                              resized to the engine size (VISBENCH_LOMATRT_SIZE, default 512)
 =====================  =========================================================
 
 Dense matchers are sampled with the model's own ``sample()`` (5000
@@ -62,6 +63,14 @@ def _build_model(kind: str, arg: str | None, device: str):
     raise ValueError(f"Unknown romaxx method kind '{kind}'. Known: {', '.join(KINDS)}")
 
 
+def _resize(img, size: int):
+    """(C,H,W) -> (1,C,size,size), antialiased bilinear."""
+    import torch.nn.functional as F
+
+    return F.interpolate(img[None].float(), size=(size, size), mode="bilinear",
+                         antialias=True, align_corners=False)
+
+
 class RomaxxMatcher:
     """Harness-facing wrapper: ``load_image`` + ``__call__(img0, img1) -> match dict``."""
 
@@ -71,6 +80,7 @@ class RomaxxMatcher:
         self.kind = kind
         self.device = device
         self.num_corresp = int(os.environ.get("VISBENCH_ROMAXX_NUM_CORRESP", 5000))
+        self.lomatrt_size = int(os.environ.get("VISBENCH_LOMATRT_SIZE", 512))
         self.model = model if model is not None else _build_model(kind, arg, device)
 
     @staticmethod
@@ -84,8 +94,15 @@ class RomaxxMatcher:
         H_B, W_B = int(img1.shape[-2]), int(img1.shape[-1])
         with torch.inference_mode():
             if self.kind == "lomatrt":
-                out = self.model.match_points(img0[None].to("cuda"), img1[None].to("cuda"))
+                # LoMaTRT engines have one fixed input size and no auto-build:
+                # resize to it and map the matches back to the input frame.
+                S = self.lomatrt_size
+                a = _resize(img0, S).to("cuda")
+                b = _resize(img1, S).to("cuda")
+                out = self.model.match_points(a, b)
                 pts_A, pts_B = out[0] if isinstance(out, list) else out
+                pts_A = np.asarray(pts_A, dtype=np.float64) * [W_A / S, H_A / S]
+                pts_B = np.asarray(pts_B, dtype=np.float64) * [W_B / S, H_B / S]
             else:
                 preds = self.model.match(img0, img1)
                 matches, _ = self.model.sample(preds, self.num_corresp)

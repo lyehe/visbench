@@ -183,3 +183,24 @@ def test_vismatch_loma_aliases(monkeypatch):
     from visbench.methods.vismatch_loader import build_vismatch
     assert build_vismatch("loma-g", "cpu") == "m"
     assert calls == {"name": "loma", "arch": "LoMa-G", "max_num_keypoints": 4096}
+
+
+def test_romaxx_adapter_lomatrt_maps_back_from_engine_size(monkeypatch):
+    torch = pytest.importorskip("torch")
+    if not hasattr(torch, "inference_mode"):
+        pytest.skip("real torch not installed (conftest stub)")
+    from visbench.methods.romaxx_loader import RomaxxMatcher
+
+    seen = {}
+
+    class FakeLoMa:
+        def match_points(self, a, b):
+            seen["shapes"] = (tuple(a.shape), tuple(b.shape))
+            return np.array([[256.0, 128.0]]), np.array([[512.0, 0.0]])
+
+    monkeypatch.setattr(torch.Tensor, "to", lambda self, *a, **k: self)
+    m = RomaxxMatcher("lomatrt", None, model=FakeLoMa())
+    out = m(torch.zeros(3, 100, 200), torch.zeros(3, 300, 50))
+    assert seen["shapes"] == ((1, 3, 512, 512), (1, 3, 512, 512))
+    np.testing.assert_allclose(out["matched_kpts0"], [[100.0, 25.0]])
+    np.testing.assert_allclose(out["matched_kpts1"], [[50.0, 0.0]])
