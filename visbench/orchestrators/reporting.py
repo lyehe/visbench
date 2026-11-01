@@ -193,16 +193,22 @@ def report(results_dir: Path, top_k: int = 25,
         payload["combined"].append({"method": name, "mean": mean, "n_datasets": n,
                                     "cells": [{"dataset": ds, "value": v} for ds, v in zip(panel, cells)]})
 
-    print(f"\n## Matrix ({matrix_metric or 'ranking metric per dataset'})\n")
-    print("  " + f"{'method':<46} " + "  ".join(ds[:8].rjust(8) for ds in panel))
-    for name in sorted(rows):
-        dsmap = rows[name]
+    # Datasets as rows (full names), methods as columns: panels are long and
+    # method lists short, so this keeps every dataset name readable.
+    print(f"\n## Matrix ({matrix_metric or 'ranking metric per dataset'}; rows = datasets)\n")
+    methods = sorted(rows)
+    width = max([len(ds) for ds in panel] + [8])
+    print("  " + f"{'dataset':<{width}} " + "  ".join(f"{m[:12]:>12}" for m in methods))
+    for name in methods:
+        payload["matrix"][name] = {}
+    for ds in panel:
+        key = matrix_metric or TASK_METRICS.get(tasks[ds], TASK_METRICS["qualitative"])[0][0]
         vals = []
-        for ds in panel:
-            key = matrix_metric or TASK_METRICS.get(tasks[ds], TASK_METRICS["qualitative"])[0][0]
-            vals.append(_value(dsmap[ds], key) if ds in dsmap else None)
-        payload["matrix"][name] = dict(zip(panel, vals))
-        print(f"  {name[:44]:<46} " + "  ".join(f"{_fmt(v):>8}" for v in vals))
+        for name in methods:
+            v = _value(rows[name][ds], key) if ds in rows[name] else None
+            payload["matrix"][name][ds] = v
+            vals.append(v)
+        print("  " + f"{ds:<{width}} " + "  ".join(f"{_fmt(v):>12}" for v in vals))
     print()
 
     if json_out is not None:
