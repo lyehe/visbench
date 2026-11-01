@@ -15,7 +15,6 @@
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 
 # --- Bug 1: Lowe ratio test partition ---------------------------------------
@@ -68,7 +67,7 @@ def test_mutual_nn_lowe_ratio_accepts_clear_winners():
 def test_perspective_make_is_pure_function_of_wh():
     """Same (w, h) should produce same H_aug whether it's the first call or
     the 100th call. Previously the RNG state leaked across calls."""
-    from visbench.datasets.synthetic_geometric import _perspective
+    from visbench.datasets.stress.synthetic_geometric import _perspective
     fn = _perspective(strength=0.1, seed=42)
     H1, dims1 = fn(640, 480)
     # Hammer the function with other (w, h) — should not affect the original.
@@ -81,7 +80,7 @@ def test_perspective_make_is_pure_function_of_wh():
 
 
 def test_random_affine_make_is_pure_function_of_wh():
-    from visbench.datasets.synthetic_geometric import _random_affine
+    from visbench.datasets.stress.synthetic_geometric import _random_affine
     fn = _random_affine(seed=7)
     H1, _ = fn(640, 480)
     for _ in range(20):
@@ -95,7 +94,7 @@ def test_two_calls_to_iter_pairs_produce_same_H():
     """End-to-end: a second iter_pairs() in the same process should yield the
     same H_gt as the first (the previous bug silently desynced cache and H_gt).
     Uses synthetic_geometric directly without needing real image data."""
-    from visbench.datasets.synthetic_geometric import _perspective
+    from visbench.datasets.stress.synthetic_geometric import _perspective
     make = _perspective(strength=0.1, seed=0)
     sizes = [(320, 240), (640, 480), (320, 240), (800, 600), (640, 480)]
     Hs = [make(w, h)[0] for (w, h) in sizes]
@@ -168,8 +167,10 @@ def test_eval_correspondence_zero_gt_returns_finite():
     import tempfile
     with tempfile.TemporaryDirectory() as td:
         from pathlib import Path
-        p_a = Path(td) / "a.png"; Image.new("RGB", (32, 32)).save(p_a)
-        p_b = Path(td) / "b.png"; Image.new("RGB", (32, 32)).save(p_b)
+        p_a = Path(td) / "a.png"
+        Image.new("RGB", (32, 32)).save(p_a)
+        p_b = Path(td) / "b.png"
+        Image.new("RGB", (32, 32)).save(p_b)
         pair = {
             "im_A_path": str(p_a),
             "im_B_path": str(p_b),

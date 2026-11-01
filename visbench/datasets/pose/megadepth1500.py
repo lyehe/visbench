@@ -26,9 +26,9 @@ from typing import Iterator
 
 import numpy as np
 
-from ..core.metrics.pose import compute_relative_pose
-from ._registry import DatasetSpec, register
-from ._rotation import rotate_camera, rotated_image
+from ...core.metrics.pose import compute_relative_pose
+from .._registry import DatasetSpec, register
+from .._rotation import rotate_camera, rotated_image
 
 
 # Public mirror used by LoFTR/ASpan/RoMa benchmark scripts.

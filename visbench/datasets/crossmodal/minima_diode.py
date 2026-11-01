@@ -11,13 +11,12 @@ import numpy as np
 from pathlib import Path
 from typing import Iterator
 
-from ._download import download_hf
 from ._minima_homography import (
     load_resized_to_disk,
     sample_homography,
     warp_and_cache,
 )
-from ._registry import DatasetSpec, register
+from .._registry import DatasetSpec, register
 
 TARGET_SHAPE = (480, 640)
 _HF_REPO = "diode-dataset/diode-outdoor-val"

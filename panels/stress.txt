@@ -1,0 +1,13 @@
+# Stress panel: HPatches under rotation and one strong setting per degradation
+# family. Cheap (HPatches-sized); use to locate failure modes, not to rank.
+hpatches_rot45
+hpatches_rot90
+hpatches_rot180
+synthetic_jpeg_q10
+synthetic_noise_30
+synthetic_motion_blur_15
+synthetic_low_light
+synthetic_fog
+synthetic_scale_0p5
+synthetic_perspective_strong
+synthetic_rot90_low_light

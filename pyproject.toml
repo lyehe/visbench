@@ -20,39 +20,34 @@ classifiers = [
 ]
 
 dependencies = [
+  # Matchers come from vismatch, which declares its own model dependencies.
   "vismatch",
   "torch>=2.0",
-  "torchvision>=0.15",
   "opencv-python>=4.5.4",
-  "kornia>=0.7.3",
   "numpy",
   "scipy",
-  "scikit-image",
-  "scikit-learn",
   "pillow",
+  "tqdm",
+  # Dataset downloads / formats.
   "huggingface_hub>=0.22.0",
   "hf_transfer>=0.1.5",
-  "datasets",
   "gdown>=5.1.0",
-  "py3_wget>=0.3",
   "py7zr",
-  "tqdm",
-  "loguru",
-  "h5py",
-  "omegaconf",
-  "poselib",
-  "tabulate",
-  "requests",
+  "pyarrow",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest", "ruff", "mypy"]
+dev = ["pytest", "ruff==0.14.5"]
+# Aachen v1.1 reads its COLMAP model with pycolmap.
+aachen = ["pycolmap"]
+# romaxx:<kind> methods need RoMaXX installed in the same environment
+# (it is not on PyPI; e.g. `uv pip install -e <path-to-romaxx>`).
 
 [project.scripts]
 visbench = "visbench.__main__:main"
 
 [project.urls]
-Homepage = "https://github.com/yourorg/visbench"
+Homepage = "https://github.com/lyehe/visbench"
 
 [tool.hatch.build.targets.wheel]
 packages = ["visbench"]

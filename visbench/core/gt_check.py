@@ -3,7 +3,7 @@
 Canonical copy: featurexx/scripts/real_geom_check.py.  Identical vendored copies live in
   featurexx/third_party/mvroma/tests/_real_geom_check.py
   featurexx/third_party/gim/tools/_real_geom_check.py
-  visbench/tests/_real_geom_check.py
+  visbench/visbench/core/gt_check.py (used by `visbench check` and tests/test_real_pose_geometry.py)
   depth-anything-3/scripts/_real_geom_check.py
 Keep them in sync (only numpy + cv2 are required).
 

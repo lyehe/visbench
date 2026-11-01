@@ -15,9 +15,9 @@ from typing import Iterator
 
 import numpy as np
 
-from ..core.metrics.pose import compute_relative_pose
-from ._registry import DatasetSpec, register
-from .megadepth1500 import SCENE_FILES
+from ...core.metrics.pose import compute_relative_pose
+from .._registry import DatasetSpec, register
+from ..pose.megadepth1500 import SCENE_FILES
 
 MODALITY_DIRS = {
     "depth":    "Depth",
@@ -77,7 +77,8 @@ def _make_iter(modality: str):
                 idx1, idx2 = pi[0]
                 K0 = intrinsics[idx1].copy()
                 K1 = intrinsics[idx2].copy()
-                T1 = poses[idx1]; T2 = poses[idx2]
+                T1 = poses[idx1]
+                T2 = poses[idx2]
                 R, t = compute_relative_pose(T1[:3, :3], T1[:3, 3], T2[:3, :3], T2[:3, 3])
                 im_A_path = md_root / im_paths[idx1]
                 im_B_rel = im_paths[idx2]

@@ -82,7 +82,7 @@ def _make_hardmatch(root: Path, n_cat=100, corr_rows=10):
 
 
 def test_hardmatch_split_and_filters(tmp_path):
-    from visbench.datasets.hardmatch import iter_pairs, split_pairs
+    from visbench.datasets.correspondence.hardmatch import iter_pairs, split_pairs
     _make_hardmatch(tmp_path)
     test, val = split_pairs(tmp_path, "test"), split_pairs(tmp_path, "val")
     assert len(test) == 90 and len(val) == 10 and not set(test) & set(val)
@@ -92,7 +92,7 @@ def test_hardmatch_split_and_filters(tmp_path):
 
 
 def test_hardmatch_requires_100_categories(tmp_path):
-    from visbench.datasets.hardmatch import iter_pairs
+    from visbench.datasets.correspondence.hardmatch import iter_pairs
     _make_hardmatch(tmp_path, n_cat=99)
     with pytest.raises(ValueError):
         list(iter_pairs(tmp_path))
@@ -127,7 +127,7 @@ def test_point_homography_perfect_matches(tmp_path):
 
 
 def test_satast_loader_reads_annotations(tmp_path):
-    from visbench.datasets.satast import iter_pairs
+    from visbench.datasets.homography.satast import iter_pairs
     (tmp_path / "annotations-v1").mkdir()
     (tmp_path / "data" / "X").mkdir(parents=True)
     Image.new("RGB", (8, 8)).save(tmp_path / "data" / "X" / "q.jpg")

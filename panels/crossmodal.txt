@@ -1,0 +1,12 @@
+# Cross-modal panel (MINIMA suite): real RGB-infrared / RGB-depth / RGB-event /
+# medical and remote sensing, plus MegaDepth-1500 rendered into six modalities.
+minima_metu_vistir
+minima_diode
+minima_dsec
+minima_mmim
+minima_md1500_depth
+minima_md1500_event
+minima_md1500_infrared
+minima_md1500_normal
+minima_md1500_paint
+minima_md1500_sketch

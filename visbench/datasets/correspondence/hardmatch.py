@@ -28,9 +28,9 @@ from typing import Iterator
 
 import numpy as np
 
-from ._download import download_url, extract_archive
-from ._registry import DatasetSpec, register
-from ._rotation import rotate_points, rotated_image
+from .._download import download_url, extract_archive
+from .._registry import DatasetSpec, register
+from .._rotation import rotate_points, rotated_image
 
 _ZIP_URL = "https://github.com/davnords/storage/releases/download/hardmatch/hardmatch.zip"
 _SPLIT_SEED = 1337

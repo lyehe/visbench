@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from ._registry import DatasetSpec, register
+from .._registry import DatasetSpec, register
 from .megadepth1500 import iter_pairs as _iter, download as _download
 
 

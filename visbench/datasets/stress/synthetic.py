@@ -13,9 +13,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import cv2
-import numpy as np
 
-from ._registry import DatasetSpec, register
+from .._registry import DatasetSpec, register
 from ._synthetic_common import (
     base_pairs,
     gauss_blur,
@@ -23,7 +22,7 @@ from ._synthetic_common import (
     jpeg,
     make_iter,
 )
-from .hpatches import download as _download_hpatches
+from ..homography.hpatches import download as _download_hpatches
 
 # Legacy underscore aliases — external code that imported from this module
 # (e.g. synthetic_compound previously did `from .synthetic import _jpeg`)
@@ -39,37 +38,11 @@ def download(data_root: Path | str) -> Path:
     return _download_hpatches(data_root)
 
 
-def _gamma(g: float):
-    lut = np.array([((i / 255.0) ** (1.0 / g)) * 255 for i in range(256)], dtype=np.uint8)
-    def f(arr):
-        return cv2.LUT(arr, lut)
-    return f
-
-
 def _scale(s: float):
     def f(arr):
         h, w = arr.shape[:2]
         return cv2.resize(arr, (max(1, int(w * s)), max(1, int(h * s))),
                           interpolation=cv2.INTER_AREA if s < 1 else cv2.INTER_CUBIC)
-    return f
-
-
-def _hsv_shift(dh: int):
-    def f(arr):
-        hsv = cv2.cvtColor(arr, cv2.COLOR_BGR2HSV).astype(np.int16)
-        hsv[..., 0] = (hsv[..., 0] + dh) % 180
-        return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR)
-    return f
-
-
-def _salt_pepper(p: float):
-    def f(arr):
-        rng = np.random.default_rng(0)
-        mask = rng.uniform(0, 1, arr.shape[:2])
-        out = arr.copy()
-        out[mask < p / 2] = 0
-        out[mask > 1 - p / 2] = 255
-        return out
     return f
 
 

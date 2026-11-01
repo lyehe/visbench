@@ -19,10 +19,10 @@ from typing import Callable, Iterator
 
 import cv2
 
-from ..core.imageio import imread
+from ...core.imageio import imread
 import numpy as np
 
-from .hpatches import DEGENERATE
+from ..homography.hpatches import DEGENERATE
 
 
 def base_pairs(data_root: Path, max_pairs: int | None) -> Iterator[dict]:

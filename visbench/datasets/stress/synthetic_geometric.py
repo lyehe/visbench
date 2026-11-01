@@ -12,8 +12,8 @@ from typing import Callable
 import cv2
 import numpy as np
 
-from ..core.imageio import imread
-from ._registry import DatasetSpec, register
+from ...core.imageio import imread
+from .._registry import DatasetSpec, register
 from ._synthetic_common import base_pairs as _base_pairs
 from .synthetic import download as _download_hpatches
 
@@ -47,35 +47,6 @@ def _compose_iter(name: str, make_H_and_warp: Callable[[int, int], tuple]):
     return it
 
 
-def _hflip():
-    def make(w, h):
-        H = np.array([[-1.0, 0.0, w], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-        return H, (w, h)
-    return make
-
-
-def _vflip():
-    def make(w, h):
-        H = np.array([[1.0, 0.0, 0.0], [0.0, -1.0, h], [0.0, 0.0, 1.0]])
-        return H, (w, h)
-    return make
-
-
-def _shear(sx: float):
-    def make(w, h):
-        S = np.array([[1.0, sx, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-        corners = np.array([[0, 0, 1], [w, 0, 1], [w, h, 1], [0, h, 1]], dtype=np.float64).T
-        wc = S @ corners
-        xs, ys = wc[0], wc[1]
-        tx, ty = -min(0, xs.min()), -min(0, ys.min())
-        T = np.array([[1.0, 0.0, tx], [0.0, 1.0, ty], [0.0, 0.0, 1.0]])
-        H = T @ S
-        nw = int(np.ceil(xs.max() - min(0, xs.min())))
-        nh = int(np.ceil(ys.max() - min(0, ys.min())))
-        return H, (nw, nh)
-    return make
-
-
 def _stable_rng(seed: int, w: int, h: int) -> np.random.Generator:
     """Deterministic per-call RNG keyed on (seed, w, h).
 
@@ -98,7 +69,8 @@ def _perspective(strength: float, seed: int = 0):
         dst = src + rng.uniform(-d, d, src.shape).astype(np.float32)
         H = cv2.getPerspectiveTransform(src, dst)
         corners = np.concatenate([dst, np.ones((4, 1), dtype=np.float32)], axis=1).T
-        xs = corners[0]; ys = corners[1]
+        xs = corners[0]
+        ys = corners[1]
         tx, ty = -min(0.0, float(xs.min())), -min(0.0, float(ys.min()))
         T = np.array([[1.0, 0.0, tx], [0.0, 1.0, ty], [0.0, 0.0, 1.0]])
         H_full = T @ H

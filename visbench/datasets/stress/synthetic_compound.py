@@ -11,26 +11,19 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..core.imageio import imread
-from ._registry import DatasetSpec, register
+from ...core.imageio import imread
+from .._registry import DatasetSpec, register
 from ._synthetic_common import (
     base_pairs as _base_pairs,
-    gauss_blur as _gauss_blur,
-    gauss_noise as _gauss_noise,
-    jpeg as _jpeg,
 )
-from .hpatches_rotated import _rotation_homography
+from ..homography.hpatches_rotated import _rotation_homography
 from .synthetic import download as _download_hpatches
 # These photometric primitives are still defined in synthetic_advanced.py
 # rather than _synthetic_common because they're the "advanced" tier of the
 # perturbation taxonomy — keeping them with their sibling registrations
 # preserves the per-tier file boundary the dataset catalog uses.
 from .synthetic_advanced import (
-    _chromatic_aberration,
-    _defocus,
-    _fog,
     _low_light,
-    _motion_blur,
 )
 
 

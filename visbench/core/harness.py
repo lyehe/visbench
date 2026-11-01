@@ -327,12 +327,16 @@ def eval_homography_pairs(matcher, pairs, resize_long: int | None = None,
         # original frame) compute comparable coordinates.
         if resize_long is not None:
             if len(k0):
-                k0[:, 0] /= sx0; k0[:, 1] /= sy0
-                k1[:, 0] /= sx1; k1[:, 1] /= sy1
+                k0[:, 0] /= sx0
+                k0[:, 1] /= sy0
+                k1[:, 0] /= sx1
+                k1[:, 1] /= sy1
             if len(ak0):
-                ak0[:, 0] /= sx0; ak0[:, 1] /= sy0
+                ak0[:, 0] /= sx0
+                ak0[:, 1] /= sy0
             if len(ak1):
-                ak1[:, 0] /= sx1; ak1[:, 1] /= sy1
+                ak1[:, 0] /= sx1
+                ak1[:, 1] /= sy1
 
         if len(k0) >= MIN_HOMOG_MATCHES:
             ransac_thr = ransac_thresh_base * min(w1, h1) / HOMOG_REF_MIN_SIDE
@@ -430,8 +434,10 @@ def eval_point_homography_pairs(matcher, pairs, resize_long: int | None = None,
             match_counts.append(0)
             continue
         match_counts.append(len(k0))
-        k0[:, 0] /= sx0; k0[:, 1] /= sy0
-        k1[:, 0] /= sx1; k1[:, 1] /= sy1
+        k0[:, 0] /= sx0
+        k0[:, 1] /= sy0
+        k1[:, 0] /= sx1
+        k1[:, 1] /= sy1
         H = None
         if len(k0) >= MIN_HOMOG_MATCHES:
             try:
@@ -552,8 +558,10 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
         n_kpts1.append(len(result.get("all_kpts1", np.empty((0, 2)))))
 
         # Back to original pixels, where the GT correspondences live.
-        kpts0[:, 0] /= sx0; kpts0[:, 1] /= sy0
-        kpts1[:, 0] /= sx1; kpts1[:, 1] /= sy1
+        kpts0[:, 0] /= sx0
+        kpts0[:, 1] /= sy0
+        kpts1[:, 0] /= sx1
+        kpts1[:, 1] /= sy1
 
         F_pred = None
         if len(kpts0) >= MIN_FUND_MATCHES:
@@ -640,8 +648,10 @@ def eval_fundamental_pairs(matcher, pairs, resize_long: int | None = None,
         # Bring matches back to ORIGINAL image frame so they're comparable to F_gt
         # (which is defined in the original image coordinates).
         if resize_long is not None and len(kpts0):
-            kpts0[:, 0] /= sx0; kpts0[:, 1] /= sy0
-            kpts1[:, 0] /= sx1; kpts1[:, 1] /= sy1
+            kpts0[:, 0] /= sx0
+            kpts0[:, 1] /= sy0
+            kpts1[:, 0] /= sx1
+            kpts1[:, 1] /= sy1
 
         ths_arr = np.asarray(thresholds, dtype=np.float64)
         if len(kpts0) == 0:

@@ -150,5 +150,5 @@ def run_standard_parallel(panel_path: Path, methods_path: Path, out_dir: Path,
             if rc != 0 and stderr:
                 # Surface the last few lines of stderr for diagnosis.
                 tail = "\n".join(stderr.strip().splitlines()[-6:])
-                print(f"  stderr tail:\n    " + tail.replace("\n", "\n    "),
+                print("  stderr tail:\n    " + tail.replace("\n", "\n    "),
                       file=sys.stderr)

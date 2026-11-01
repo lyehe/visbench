@@ -8,6 +8,7 @@ Subcommands:
   batch                          one method, many datasets
   standard                       panel-based (datasets x methods) sweep
   report                         aggregate per-cell JSONs into ranking tables
+  check <dataset>                CPU sanity check of a loader's ground truth on real data
 """
 
 from __future__ import annotations
@@ -211,6 +212,20 @@ def _cmd_report(args):
            matrix_metric=args.matrix_metric)
 
 
+def _cmd_check(args):
+    from . import datasets as _ds_pkg  # noqa: F401
+    from .datasets import get as ds_get
+    from .orchestrators.check import check_dataset
+
+    base = Path(args.data_root_default) if args.data_root_default else _default_data_root()
+    ok = True
+    for name in args.names:
+        root = Path(args.data_root) if args.data_root else base / ds_get(name).default_root
+        ok &= check_dataset(name, root, n_pairs=args.pairs, seed=args.seed)
+    if not ok:
+        raise SystemExit(1)
+
+
 def _resolve_panel(name_or_path: str) -> Path:
     p = Path(name_or_path)
     if p.exists():
@@ -359,6 +374,15 @@ def _build_parser() -> argparse.ArgumentParser:
     prp.add_argument("--matrix-metric", default=None,
                      help="Metric key for every matrix cell (default: each dataset's ranking metric).")
     prp.set_defaults(func=_cmd_report)
+
+    pc = sub.add_parser("check", help="Sanity-check a loader's ground truth on real data (CPU)")
+    pc.add_argument("names", nargs="+", help="Dataset name(s).")
+    pc.add_argument("--pairs", type=int, default=8, help="Scene-balanced pairs to check (default 8).")
+    pc.add_argument("--data-root", default=None, help="Exact data directory (single dataset).")
+    pc.add_argument("--data-root-default", default=None,
+                    help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
+    pc.add_argument("--seed", type=int, default=0, help="Pair-sampling seed (default 0).")
+    pc.set_defaults(func=_cmd_check)
 
     return p
 

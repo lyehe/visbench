@@ -8,10 +8,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import numpy as np
-import pytest
 
 from visbench.__main__ import _build_parser
 
@@ -53,8 +51,10 @@ def test_pose_eval_deterministic_with_seed(tmp_path):
     from visbench.core.harness import eval_pose_pairs, reset_caches
 
     # Two readable image files so _pil_size succeeds.
-    p_a = tmp_path / "a.png"; Image.new("RGB", (64, 48)).save(p_a)
-    p_b = tmp_path / "b.png"; Image.new("RGB", (64, 48)).save(p_b)
+    p_a = tmp_path / "a.png"
+    Image.new("RGB", (64, 48)).save(p_a)
+    p_b = tmp_path / "b.png"
+    Image.new("RGB", (64, 48)).save(p_b)
 
     class StubMatcher:
         def load_image(self, p, resize=None):

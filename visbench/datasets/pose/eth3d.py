@@ -21,8 +21,8 @@ from typing import Iterator
 
 import numpy as np
 
-from ..core.metrics.pose import compute_relative_pose
-from ._registry import DatasetSpec, register
+from ...core.metrics.pose import compute_relative_pose
+from .._registry import DatasetSpec, register
 
 # Co-visibility pairing (no pairs.txt): keep the TOP_K most-covisible partners per
 # image that share at least MIN_COVIS 3D points.
@@ -71,7 +71,7 @@ def _parse_colmap_images(path: Path) -> dict:
     out = {}
     # Keep blank lines: COLMAP writes an empty points line for an image with no
     # observations, and dropping it would shift every later image by a record.
-    lines = [l for l in path.read_text().splitlines() if not l.startswith("#")]
+    lines = [ln for ln in path.read_text().splitlines() if not ln.startswith("#")]
     i = 0
     while i < len(lines):
         if not lines[i].strip():
@@ -82,7 +82,8 @@ def _parse_colmap_images(path: Path) -> dict:
         tx, ty, tz = map(float, tok[5:8])
         cam_id = int(tok[8])
         name = tok[9]
-        q = np.array([qw, qx, qy, qz]); q /= np.linalg.norm(q) + 1e-12
+        q = np.array([qw, qx, qy, qz])
+        q /= np.linalg.norm(q) + 1e-12
         w, x, y, z = q
         R = np.array([
             [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
@@ -129,7 +130,7 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None) -> Iterator[
         imgs = _parse_colmap_images(files[1])
         pair_file = scene / "pairs.txt"
         if pair_file.exists():
-            pairs = (tuple(l.split()[:2]) for l in pair_file.read_text().splitlines() if len(l.split()) >= 2)
+            pairs = (tuple(ln.split()[:2]) for ln in pair_file.read_text().splitlines() if len(ln.split()) >= 2)
         else:
             pairs = _covisible_pairs(imgs)
         for a, b in pairs:

@@ -13,7 +13,7 @@ from typing import Iterator
 
 import numpy as np
 
-from ._registry import DatasetSpec, register
+from .._registry import DatasetSpec, register
 
 _TRANSLATION = np.array([[1, 0, -1], [0, 1, -1], [0, 0, 1]], dtype=np.float64)
 

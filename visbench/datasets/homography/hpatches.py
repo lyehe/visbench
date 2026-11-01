@@ -13,8 +13,8 @@ from typing import Iterator
 
 import numpy as np
 
-from ._registry import DatasetSpec, register
-from ._download import download_hf, extract_archive
+from .._registry import DatasetSpec, register
+from .._download import download_hf, extract_archive
 
 _HF_REPO = "vbalnt/hpatches"
 _HF_ARCHIVE = "hpatches-sequences-release.zip"

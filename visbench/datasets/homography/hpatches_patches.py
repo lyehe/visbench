@@ -16,8 +16,8 @@ from typing import Iterator
 import cv2
 import numpy as np
 
-from ..core.imageio import imread
-from ._registry import DatasetSpec, register
+from ...core.imageio import imread
+from .._registry import DatasetSpec, register
 from .hpatches import DEGENERATE, download as _download_hpatches
 
 

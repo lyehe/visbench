@@ -1,7 +1,7 @@
-# Core panel — small, fast, no heavy DUA-gated downloads.
+# Core panel: the benchmarks recent matching papers report (LoMa / RoMa v2,
+# 2025-2026). All public; `visbench download <name>` fetches or explains each.
+megadepth1500
+hardmatch
+wxbs
+eth3d
 hpatches
-hpatches_rot90
-oxford_affine
-evd
-sacre_coeur
-synthetic_jpeg_q30

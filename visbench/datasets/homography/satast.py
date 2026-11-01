@@ -31,8 +31,8 @@ from typing import Iterator
 
 import numpy as np
 
-from ._download import download_url, extract_archive
-from ._registry import DatasetSpec, register
+from .._download import download_url, extract_archive
+from .._registry import DatasetSpec, register
 
 _REPO = "https://github.com/georg-bn/satast"
 _ARCHIVE = "https://github.com/georg-bn/satast/archive/refs/heads/main.zip"
@@ -72,7 +72,7 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None) -> Iterator[
     data_root = Path(data_root)
     ann_dir = data_root / _ANNOTATIONS
     if not ann_dir.is_dir():
-        raise FileNotFoundError(f"SatAst annotations not found at {ann_dir}; see visbench/datasets/satast.py.")
+        raise FileNotFoundError(f"SatAst annotations not found at {ann_dir}; run `visbench download satast`.")
     count = 0
     for ann in sorted(ann_dir.glob("*.json")):
         d = json.loads(ann.read_text(encoding="utf-8"))

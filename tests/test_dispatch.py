@@ -68,7 +68,6 @@ def _identical_pair_with_real_image(tmp_path):
     succeeds — needed since _qualitative_sweep now goes through the same
     aspect-preserving resize as the other eval_* paths."""
     from PIL import Image
-    import numpy as np
     p = tmp_path / "stub.png"
     Image.new("RGB", (32, 32)).save(p)
     pair = dict(_identical_pair()[0])

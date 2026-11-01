@@ -3,24 +3,23 @@
 For a handful of real pairs from each dataset's REAL ``iter_pairs`` we compute SIFT
 matches and the median Sampson epipolar error under the yielded GT (R_0to1, t_0to1,
 K0, K1), and under a 5-8 deg perturbed rotation.  Correct GT gives ~<2 px and is far
-better than the perturbed pose; a convention bug (e.g. TartanAir NED poses used as
-OpenCV, fixed 2026-10-01 in visbench/datasets/tartanair.py::_parse_poses) does not.
+better than the perturbed pose; a pose-convention bug does not. megadepth1500_rot90
+checks the intrinsics/pose transform of the rotated split.
 
-Data root: $VISBENCH_DATA_ROOT/<default_root>, else D:\\Yehe\\matcher_training\\<default_root>.
+Data root: $VISBENCH_DATA_ROOT/<default_root>, else $VISBENCH_REAL_DATA_ROOT/<default_root>
+(default D:/Yehe/matcher_training). Rotated images are cached under <root>/_cache_rot90.
 Tests skip cleanly when the data is absent.  Run:  pytest tests/test_real_pose_geometry.py -s
 """
 
 from __future__ import annotations
 
 import os
-import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-import _real_geom_check as rg  # noqa: E402
+from visbench.core import gt_check as rg
 
 
 MATCHER_TRAINING = Path(os.environ.get("VISBENCH_REAL_DATA_ROOT", r"D:\Yehe\matcher_training"))
@@ -30,6 +29,7 @@ MAX_SIDE = 840  # downscale big images (MegaDepth) to keep SIFT on CPU fast
 # dataset -> (pairs to scan lazily, stride when picking pairs from the scan)
 SAMPLING = {
     "megadepth1500": (1500, 187),
+    "megadepth1500_rot90": (1500, 187),
     "eth3d": (400, 50),
 }
 
@@ -90,7 +90,7 @@ def _evaluate(name: str, pairs: list[dict]) -> rg.Summary:
     return summary
 
 
-@pytest.mark.parametrize("name", ["megadepth1500", "eth3d"])
+@pytest.mark.parametrize("name", ["megadepth1500", "megadepth1500_rot90", "eth3d"])
 def test_real_pose_geometry(name):
     summary = _evaluate(name, _pick_pairs(name))
     print("\n" + summary.report())

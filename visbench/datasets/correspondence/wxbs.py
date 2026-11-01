@@ -17,9 +17,9 @@ from typing import Iterator
 
 import numpy as np
 
-from ._download import download_hf
-from ._registry import DatasetSpec, register
-from ._rotation import rotate_points, rotated_image
+from .._download import download_hf
+from .._registry import DatasetSpec, register
+from .._rotation import rotate_points, rotated_image
 
 _HF_REPO = "vrg-prague/wxbs"
 _TEST_PARQUET = Path("data") / "test-00000-of-00001.parquet"

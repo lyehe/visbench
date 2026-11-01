@@ -106,7 +106,7 @@ def test_report_uses_task_metrics_and_na(tmp_path, capsys):
 
 
 def test_eth3d_images_txt_keeps_blank_points_lines(tmp_path):
-    from visbench.datasets.eth3d import _parse_colmap_images
+    from visbench.datasets.pose.eth3d import _parse_colmap_images
     path = tmp_path / "images.txt"
     path.write_text(
         "# header\n"

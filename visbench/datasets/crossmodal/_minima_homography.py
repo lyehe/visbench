@@ -14,7 +14,7 @@ from pathlib import Path
 
 import cv2
 
-from ..core.imageio import imread
+from ...core.imageio import imread
 import numpy as np
 from numpy.random import uniform
 
