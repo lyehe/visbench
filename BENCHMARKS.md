@@ -110,6 +110,30 @@ differences (the package README quotes LoMa at 50.6).
 Older HPatches, MegaDepth and MINIMA rows (LoFTR, LightGlue, ASpanFormer,
 EfficientLoFTR, MINIMA and XoFTR papers) remain in the JSON with their sources.
 
+## Sanity values measured with visbench
+
+Use these to confirm a local setup reproduces the protocol before trusting new
+numbers (OpenCV SIFT via `--method sift`, CPU, 2026-11-01):
+
+| Benchmark | Pairs | SIFT | Note |
+|---|---:|---:|---|
+| `megadepth1500` AUC@5 | 60 (scene-balanced) | 0.286 | LoFTR's published SIFT-NN: 0.227 |
+| `hardmatch` mAA@10px | 60 | 0.132 | |
+| `wxbs` mAA@10px | 32 | 0.046 | published SIFT ≈ 0.05 |
+| `hpatches` AUC@3px | 116 | 0.547 | |
+| `satast` AUC@10px | 39 | 0.585 | see below |
+
+On SatAst, a matcher that returns the annotations' own homography scores 0.870
+AUC@10px (the annotation-noise ceiling) and a random matcher 0. SIFT's high
+score is real: SatAst is dominated by in-plane rotation and scale change,
+which SIFT is invariant to while most learned matchers are not (LoMa reports
+that it struggles with rotation there).
+
+LoMaTRT-G through `romaxx:lomatrt:loma_G` (512×512 engines, 1024 keypoints)
+gave 0.474 AUC@5 on 300 MegaDepth-1500 pairs and 0.480 mAA@10px on HardMatch,
+below the paper's LoMa-G (784×784, 4096 keypoints) as expected for the
+smaller setting.
+
 ## Caveats
 
 - WxBS mAA differs between papers for the same method (RoMa: 72.6 in LoMa,
@@ -119,6 +143,10 @@ EfficientLoFTR, MINIMA and XoFTR papers) remain in the JSON with their sources.
   own run on the parent benchmark.
 - `vismatch:loma-{b128,b,l,g}` use 4096 keypoints, the paper setting; LoMa's
   own evaluation additionally runs at a 784×784 internal resolution.
+  `romaxx:lomatrt:*` runs at its engines' fixed size and keypoint count, so
+  compare it with the paper only as a lower-resolution variant.
+- Dense `romaxx:` matchers are scored on 5000 sampled matches, the RoMa
+  pose-benchmark convention (`VISBENCH_ROMAXX_NUM_CORRESP`).
 - Three released HardMatch test pairs contain a few annotations outside the
   image; the reference evaluator keeps them and so does visbench
   (`visbench check hardmatch` lists them).

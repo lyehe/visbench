@@ -35,7 +35,7 @@ Each module exposes `download(data_root)` and `iter_pairs(data_root, max_pairs=N
 | `hpatches` | `hpatches` | 580 | corner-error AUC@3/5/10px, MMA | [HPatches](https://github.com/hpatches/hpatches-dataset) (CC BY-NC-SA 4.0) |
 | `hpatches_rot45`, `_rot90`, `_rot180` | `hpatches` | 580 each | same | in-plane rotation of image B |
 | `hpatches_patches` | `hpatches` | — | descriptor top-1 / mAP | descriptor isolation on fixed keypoints |
-| `satast` | `satast` | 39 | pooled reprojection AUC@10px | [SatAst](https://github.com/georg-bn/satast); images served over rsync (`download_images.sh`) |
+| `satast` | `satast` | 39 | pooled reprojection AUC@10px | [SatAst](https://github.com/georg-bn/satast); `visbench download satast` fetches the annotations and, with `rsync` on `PATH`, the 78 images (126 MB). Keep the root short on Windows: file names are ~150 characters |
 
 ## Cross-modal — MINIMA suite (`datasets/crossmodal/`)
 
