@@ -71,3 +71,6 @@ exclude = ["third_party"]
 
 [tool.ruff.lint]
 ignore = ["E402", "E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

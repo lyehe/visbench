@@ -115,11 +115,22 @@ class RomaxxMatcher:
                 "all_kpts0": pts_A, "all_kpts1": pts_B, "num_inliers": len(pts_A)}
 
 
+def _native_path(arg: str) -> str:
+    """Git-Bash / MSYS style '/c/dir' -> 'C:/dir' on Windows.
+
+    The shell only rewrites arguments that start with '/', so a path embedded
+    in 'romaxx:flexglue-trt:/c/...' reaches Python unconverted.
+    """
+    if os.name == "nt" and len(arg) > 2 and arg[0] == "/" and arg[2] == "/" and arg[1].isalpha():
+        return f"{arg[1].upper()}:{arg[2:]}"
+    return arg
+
+
 def parse(name: str) -> tuple[str, str | None]:
     """'romaxx:kind[:arg]' -> (kind, arg). The arg may itself contain ':' (Windows paths)."""
     rest = name.split(":", 1)[1]
     kind, _, arg = rest.partition(":")
-    return kind.lower(), (arg or None)
+    return kind.lower(), (_native_path(arg) if arg else None)
 
 
 def build_romaxx(name: str, device: str = "cuda") -> RomaxxMatcher:

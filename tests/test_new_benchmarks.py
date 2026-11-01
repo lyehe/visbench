@@ -204,3 +204,11 @@ def test_romaxx_adapter_lomatrt_maps_back_from_engine_size(monkeypatch):
     assert seen["shapes"] == ((1, 3, 512, 512), (1, 3, 512, 512))
     np.testing.assert_allclose(out["matched_kpts0"], [[100.0, 25.0]])
     np.testing.assert_allclose(out["matched_kpts1"], [[50.0, 0.0]])
+
+
+def test_romaxx_parse_converts_msys_paths(monkeypatch):
+    from visbench.methods import romaxx_loader
+    monkeypatch.setattr(romaxx_loader.os, "name", "nt")
+    assert romaxx_loader.parse("romaxx:flexglue-trt:/c/b/core") == ("flexglue-trt", "C:/b/core")
+    assert romaxx_loader.parse("romaxx:flexglue-trt:C:/b/core") == ("flexglue-trt", "C:/b/core")
+    assert romaxx_loader.parse("romaxx:romatrt:fast") == ("romatrt", "fast")
