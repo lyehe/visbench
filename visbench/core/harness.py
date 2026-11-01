@@ -10,6 +10,7 @@ import numpy as np
 from tqdm import tqdm
 
 from . import _image_cache
+from .sampling import EmptyPairsError  # noqa: F401  (re-exported)
 from .metrics._constants import (
     FUND_RANSAC_CONF,
     FUND_RANSAC_MAX_ITERS,
@@ -69,9 +70,14 @@ def _warn_pair_failure(fn_name: str, im_A_path, im_B_path, exc, n_failures: int)
 
 def _warn_summary(fn_name: str, n_consumed: int, n_failures: int,
                   fallback_note: str) -> None:
-    """End-of-loop summary warning: zero-input + failure-count."""
+    """End-of-loop check: zero input raises, failures warn.
+
+    A dataset that yields no pairs (missing data, unrecognised layout) used to
+    be scored as AUC 0 and written as a normal result. It now raises so the
+    cell is reported as failed instead of as a real score.
+    """
     if n_consumed == 0:
-        warnings.warn(f"{fn_name}: zero pairs consumed.", stacklevel=2)
+        raise EmptyPairsError(f"{fn_name}: dataset yielded zero pairs; check the data root and layout.")
     if n_failures > 0:
         warnings.warn(
             f"{fn_name}: {n_failures} pair(s) failed; {fallback_note}",
@@ -635,8 +641,10 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
     timings = []
     metrics_by_subset: dict[str, list] = {}
     skipped = False
+    n_seen = 0
 
     for pair in tqdm(pairs, desc="pairs", disable=not progress):
+        n_seen += 1
         im_A_path = Path(pair["im_A_path"])
         im_B_path = Path(pair["im_B_path"])
         kpts_A = np.asarray(pair["kpts_A"], dtype=np.float32)
@@ -671,6 +679,8 @@ def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
         m = _compute_map_topk(d_a[:n], d_b[:n], metric=metric)
         _append_by_subset(metrics_by_subset, subset, m)
 
+    if n_seen == 0:
+        raise EmptyPairsError("eval_descriptor_pairs: dataset yielded zero pairs; check the data root and layout.")
     out: dict = {"skipped": skipped}
     for subset, results in metrics_by_subset.items():
         if not results:

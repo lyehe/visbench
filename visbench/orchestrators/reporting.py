@@ -1,4 +1,9 @@
-"""Aggregate per-cell JSONs into ranking tables, with optional inline reference scores."""
+"""Aggregate per-cell JSONs into ranking tables, with optional inline reference scores.
+
+Each dataset is reported with the metrics of its own task (looked up in the
+dataset registry), so a homography dataset never shows pose keys as zeros. A
+metric a record does not contain is shown as ``n/a`` and excluded from means.
+"""
 
 from __future__ import annotations
 
@@ -6,10 +11,18 @@ import json
 from collections import defaultdict
 from pathlib import Path
 
-HP_PANEL_DEFAULT = ["hpatches", "hpatches_rot45", "hpatches_rot90", "hpatches_rot180"]
-POSE_PANEL_DEFAULT = ["megadepth1500", "tum_rgbd", "blendedmvs"]
-
 _REFERENCE_PATH = Path(__file__).resolve().parent.parent / "reference_scores.json"
+_PANEL_DIR = Path(__file__).resolve().parent.parent.parent / "panels"
+
+# task -> [(metric key, column label)]; the first entry is the ranking metric.
+TASK_METRICS: dict[str, list[tuple[str, str]]] = {
+    "pose": [("auc_5", "AUC@5"), ("auc_10", "AUC@10"), ("auc_20", "AUC@20")],
+    "homography": [("all_auc_3", "AUC@3px"), ("all_auc_5", "AUC@5px"), ("all_auc_10", "AUC@10px")],
+    "correspondence": [("all_mAA_10", "mAA@10px"), ("all_mAA_5", "mAA@5px"), ("all_pck_10", "PCK@10px")],
+    "fundamental": [("all_mAA", "mAA"), ("all_pck_3", "PCK@3px"), ("all_pck_10", "PCK@10px")],
+    "descriptor": [("all_mAP", "mAP"), ("all_top1", "top1"), ("all_top5", "top5")],
+    "qualitative": [("mean_matches", "matches"), ("mean_inliers", "inliers"), ("mean_time_s", "time s")],
+}
 
 
 def _load_results(results_dir: Path):
@@ -38,12 +51,7 @@ def _load_results(results_dir: Path):
 
 
 def _load_references() -> tuple[dict, dict, dict]:
-    """Return (refs, aliases, no_published) from packaged reference_scores.json.
-
-    refs           : {dataset: {method: metrics_dict}}
-    aliases        : {dataset: parent_dataset}      — parent's refs are inherited
-    no_published   : {dataset: explanation_string}  — show "(no published reference)" row
-    """
+    """Return (refs, aliases, no_published) from packaged reference_scores.json."""
     if not _REFERENCE_PATH.exists():
         return {}, {}, {}
     try:
@@ -72,143 +80,128 @@ def _resolve_ref(ds: str, refs: dict, aliases: dict, no_published: dict
     return None, None
 
 
-def _hp(m, key="all_auc_5"):
-    return m.get(key, 0) or 0
+def dataset_task(ds: str, sample_metrics: dict | None = None) -> str:
+    """Task from the registry; falls back to metric keys for unregistered datasets."""
+    try:
+        from ..datasets import get as get_dataset_spec
+        return get_dataset_spec(ds).task
+    except Exception:  # noqa: BLE001
+        keys = set(sample_metrics or {})
+        if "auc_5" in keys:
+            return "pose"
+        if "all_auc_3" in keys:
+            return "homography"
+        if "all_mAA_10" in keys:
+            return "correspondence"
+        if "all_mAA" in keys:
+            return "fundamental"
+        return "qualitative"
 
 
-def _pose(m, key="auc_5"):
-    return m.get(key, 0) or 0
+def _value(metrics: dict, key: str):
+    v = metrics.get(key)
+    return float(v) if isinstance(v, (int, float)) else None
+
+
+def _fmt(v) -> str:
+    return f"{v:.3f}" if v is not None else " n/a "
+
+
+def default_panel() -> list[str]:
+    path = _PANEL_DIR / "core.txt"
+    if not path.exists():
+        return []
+    return [ln.strip() for ln in path.read_text(encoding="utf-8").splitlines()
+            if ln.strip() and not ln.strip().startswith("#")]
 
 
 def report(results_dir: Path, top_k: int = 25,
-           hp_panel: list[str] | None = None,
-           pose_panel: list[str] | None = None,
+           panel: list[str] | None = None,
            show_reference: bool = True,
-           json_out: Path | None = None) -> dict:
-    """Aggregate per-cell JSONs into a ranking table.
+           json_out: Path | None = None,
+           matrix_metric: str | None = None) -> dict:
+    """Print per-dataset rankings, a combined leaderboard and a methods x datasets matrix.
 
-    Prints a human-readable table to stdout. If `json_out` is set, also writes
-    the aggregated data (per-dataset rankings + combined leaderboard) as JSON
-    to that path so it can be consumed by downstream tooling.
-
-    Returns the structured payload (whether or not it was written to disk).
+    `panel` selects and orders the datasets (default: panels/core.txt, else every
+    dataset present). The combined ranking averages each dataset's ranking
+    metric over the panel datasets a method has results for (at least half).
+    `matrix_metric` overrides the matrix cell metric (default: each dataset's
+    ranking metric). Returns the structured payload; `json_out` also writes it.
     """
-    hp_panel = hp_panel or HP_PANEL_DEFAULT
-    pose_panel = pose_panel or POSE_PANEL_DEFAULT
-    rows = _load_results(results_dir)
+    rows = _load_results(Path(results_dir))
+    present = sorted({ds for dsmap in rows.values() for ds in dsmap})
+    panel = list(panel) if panel else [ds for ds in default_panel() if ds in present] or present
     refs, aliases, no_published = (_load_references() if show_reference else ({}, {}, {}))
-    payload: dict = {
-        "results_dir": str(results_dir),
-        "per_dataset": {},
-        "combined": [],
-    }
+    payload: dict = {"results_dir": str(results_dir), "panel": panel,
+                     "per_dataset": {}, "combined": [], "matrix": {}}
 
     print(f"\n# VISBENCH REPORT  ({results_dir})\n")
     print(f"Methods with at least one result: {len(rows)}")
     if refs:
-        print("Reference rows (`ref:`) come from visbench/reference_scores.json — "
-              "published numbers from the literature. They are not included in your "
-              "leaderboard ranking.")
-    print()
+        print("`ref:` rows are published numbers from visbench/reference_scores.json; "
+              "they are not ranked against your results.")
+    print("\n## Per-dataset rankings\n")
 
-    print("## Per-dataset rankings\n")
-    for ds in hp_panel + pose_panel:
-        is_hp = ds in hp_panel
-        candidates = []
+    tasks: dict[str, str] = {}
+    for ds in panel:
+        sample = next((dsmap[ds] for dsmap in rows.values() if ds in dsmap), None)
+        task = dataset_task(ds, sample)
+        tasks[ds] = task
+        cols = TASK_METRICS.get(task, TASK_METRICS["qualitative"])
+        ranked = []
         for name, dsmap in rows.items():
-            if ds not in dsmap:
-                continue
-            metrics = dsmap[ds]
-            if is_hp:
-                candidates.append(("user", name,
-                                   _hp(metrics, "all_auc_5"),
-                                   _hp(metrics, "all_auc_10"),
-                                   _hp(metrics, "all_mma_3")))
-            else:
-                candidates.append(("user", name,
-                                   _pose(metrics, "auc_5"),
-                                   _pose(metrics, "auc_10"),
-                                   _pose(metrics, "auc_20")))
-        candidates.sort(key=lambda r: -r[2])
-        candidates = candidates[:top_k]
-
-        # Append reference rows AFTER ranking so they don't compete in the top-k cut.
+            if ds in dsmap:
+                ranked.append(("user", name, [_value(dsmap[ds], k) for k, _ in cols]))
+        ranked.sort(key=lambda r: -(r[2][0] if r[2][0] is not None else float("-inf")))
+        ranked = ranked[:top_k]
         ref_ds, ref_note = _resolve_ref(ds, refs, aliases, no_published)
-        if ref_ds:
-            if is_hp:
-                for ref_name, m in ref_ds.items():
-                    candidates.append(("ref", ref_name,
-                                       _hp(m, "all_auc_5"),
-                                       _hp(m, "all_auc_10"),
-                                       _hp(m, "all_mma_3")))
-            else:
-                for ref_name, m in ref_ds.items():
-                    candidates.append(("ref", ref_name,
-                                       _pose(m, "auc_5"),
-                                       _pose(m, "auc_10"),
-                                       _pose(m, "auc_20")))
-
-        if not candidates:
+        for ref_name, m in (ref_ds or {}).items():
+            ranked.append(("ref", ref_name, [_value(m, k) for k, _ in cols]))
+        if not ranked:
             print(f"### {ds}: (no results)\n")
             continue
-        if is_hp:
-            print(f"### {ds}  (homography, AUC@5/AUC@10/MMA@3)\n")
-            print(f"  {'method':<45} AUC@5   AUC@10  MMA@3")
-            payload["per_dataset"][ds] = {
-                "metric_labels": ["AUC@5", "AUC@10", "MMA@3"],
-                "rows": [{"kind": k, "method": n, "values": [a, b, c]}
-                         for k, n, a, b, c in candidates],
-            }
-        else:
-            print(f"### {ds}  (pose, AUC@5/10/20 deg)\n")
-            print(f"  {'method':<45} AUC@5   AUC@10  AUC@20")
-            payload["per_dataset"][ds] = {
-                "metric_labels": ["AUC@5", "AUC@10", "AUC@20"],
-                "rows": [{"kind": k, "method": n, "values": [a, b, c]}
-                         for k, n, a, b, c in candidates],
-            }
-        for kind, name, a, b, c in candidates:
+        labels = [label for _, label in cols]
+        print(f"### {ds}  ({task}: {' / '.join(labels)})\n")
+        print(f"  {'method':<45} " + "  ".join(f"{label:>8}" for label in labels))
+        for kind, name, vals in ranked:
             label = (f"ref: {name}" if kind == "ref" else name)[:43]
-            print(f"  {label:<45} {a:.3f}   {b:.3f}   {c:.3f}")
-        # Show the alias-or-no-published note as a single line under the table.
-        if show_reference and not ref_ds and ref_note:
-            print(f"  ref: (no published reference) -- {ref_note[:80]}")
-        elif show_reference and ref_note:
-            print(f"  ref: ({ref_note})")
+            print(f"  {label:<45} " + "  ".join(f"{_fmt(v):>8}" for v in vals))
+        if show_reference and ref_note:
+            prefix = "(no published reference) -- " if not ref_ds else ""
+            print(f"  ref: {prefix}{ref_note[:80]}")
         print()
+        payload["per_dataset"][ds] = {
+            "task": task, "metric_labels": labels,
+            "rows": [{"kind": k, "method": n, "values": v} for k, n, v in ranked],
+        }
 
-    print("\n## Combined ranking (mean across panel)\n")
+    print("\n## Combined ranking (mean ranking metric across panel)\n")
     combined = []
     for name, dsmap in rows.items():
-        scores = []
-        for ds in hp_panel:
-            if ds in dsmap:
-                scores.append(_hp(dsmap[ds], "all_auc_5"))
-        for ds in pose_panel:
-            if ds in dsmap:
-                scores.append(_pose(dsmap[ds], "auc_5"))
-        if len(scores) >= max(1, len(hp_panel) // 2):
-            combined.append((name, sum(scores) / len(scores), len(scores), dsmap))
-    combined.sort(key=lambda x: -x[1])
-
-    cell_names = hp_panel + pose_panel
-    header = "  " + f"{'method':<48} mean   n_ds  " + "  ".join(c[:6] for c in cell_names)
-    print(header)
-    for name, mean, n, dsmap in combined[:top_k]:
         cells = []
-        cell_values = []
-        for ds in hp_panel:
-            v = _hp(dsmap[ds], 'all_auc_5') if ds in dsmap else None
-            cells.append(f"{v:.3f}" if v is not None else "  -  ")
-            cell_values.append({"dataset": ds, "value": v})
-        for ds in pose_panel:
-            v = _pose(dsmap[ds], 'auc_5') if ds in dsmap else None
-            cells.append(f"{v:.3f}" if v is not None else "  -  ")
-            cell_values.append({"dataset": ds, "value": v})
-        print(f"  {name[:46]:<48} {mean:.3f}  {n}     {' '.join(cells)}")
-        payload["combined"].append({
-            "method": name, "mean": mean, "n_datasets": n, "cells": cell_values,
-        })
+        for ds in panel:
+            key = TASK_METRICS.get(tasks[ds], TASK_METRICS["qualitative"])[0][0]
+            cells.append(_value(dsmap[ds], key) if ds in dsmap else None)
+        scores = [v for v in cells if v is not None]
+        if scores and len(scores) >= max(1, len(panel) // 2):
+            combined.append((name, sum(scores) / len(scores), len(scores), cells))
+    combined.sort(key=lambda x: -x[1])
+    print("  " + f"{'method':<46} mean   n_ds  " + "  ".join(ds[:8] for ds in panel))
+    for name, mean, n, cells in combined[:top_k]:
+        print(f"  {name[:44]:<46} {mean:.3f}  {n:<4}  " + "  ".join(f"{_fmt(v):>8}" for v in cells))
+        payload["combined"].append({"method": name, "mean": mean, "n_datasets": n,
+                                    "cells": [{"dataset": ds, "value": v} for ds, v in zip(panel, cells)]})
+
+    print(f"\n## Matrix ({matrix_metric or 'ranking metric per dataset'})\n")
+    print("  " + f"{'method':<46} " + "  ".join(ds[:8].rjust(8) for ds in panel))
+    for name in sorted(rows):
+        dsmap = rows[name]
+        vals = []
+        for ds in panel:
+            key = matrix_metric or TASK_METRICS.get(tasks[ds], TASK_METRICS["qualitative"])[0][0]
+            vals.append(_value(dsmap[ds], key) if ds in dsmap else None)
+        payload["matrix"][name] = dict(zip(panel, vals))
+        print(f"  {name[:44]:<46} " + "  ".join(f"{_fmt(v):>8}" for v in vals))
     print()
 
     if json_out is not None:

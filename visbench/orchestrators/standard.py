@@ -17,7 +17,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from .batch import run_batch
+from .batch import per_dataset_max_pairs, run_batch
 
 
 def _read_panel(path: Path) -> list[str]:
@@ -28,22 +28,6 @@ def _read_panel(path: Path) -> list[str]:
         if not s or s.startswith("#"):
             continue
         out.append(s)
-    return out
-
-
-def _per_dataset_max_pairs(datasets: list[str], pose: int | None,
-                           homography: int | None) -> dict:
-    from ..datasets import get as get_dataset_spec
-    out: dict[str, int] = {}
-    for ds in datasets:
-        try:
-            spec = get_dataset_spec(ds)
-        except KeyError:
-            continue
-        if spec.task == "pose" and pose is not None:
-            out[ds] = pose
-        elif spec.task in ("homography", "correspondence", "fundamental") and homography is not None:
-            out[ds] = homography
     return out
 
 
@@ -58,7 +42,7 @@ def run_standard(panel_path: Path, methods_path: Path, out_dir: Path,
     """Sequential execution: one method at a time, in-process."""
     datasets = _read_panel(Path(panel_path))
     methods = _read_panel(Path(methods_path))
-    max_pairs = _per_dataset_max_pairs(datasets, max_pairs_pose, max_pairs_homography)
+    max_pairs = per_dataset_max_pairs(datasets, max_pairs_pose, max_pairs_homography)
 
     for method in methods:
         run_batch(
@@ -110,11 +94,12 @@ def run_standard_parallel(panel_path: Path, methods_path: Path, out_dir: Path,
             "--ransac-runs", str(ransac_runs),
             "--device", device,
         ]
-        if max_pairs_pose is not None or max_pairs_homography is not None:
-            # `visbench batch` accepts a single --max-pairs; use the smaller of
-            # the two so neither task overruns its budget.
-            mp = min(x for x in (max_pairs_pose, max_pairs_homography) if x is not None)
-            argv += ["--max-pairs", str(mp)]
+        # Per-task caps are forwarded separately; a single shared cap used to
+        # shrink pose datasets to the homography budget (or vice versa).
+        if max_pairs_pose is not None:
+            argv += ["--max-pairs-pose", str(max_pairs_pose)]
+        if max_pairs_homography is not None:
+            argv += ["--max-pairs-homography", str(max_pairs_homography)]
         if not skip_existing:
             argv += ["--no-skip"]
         if seed is not None:

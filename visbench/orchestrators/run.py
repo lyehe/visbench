@@ -20,8 +20,19 @@ from ..core.harness import (
     eval_pose_pairs,
     reset_caches,
 )
+from ..core.sampling import sample_pairs
 from ..datasets import get as get_dataset_spec
 from ..methods import get as get_method_spec
+
+# Bumped whenever a change makes earlier result files non-comparable (pair
+# sampling, metric fixes). `batch --skip-existing` re-runs older records.
+RESULT_SCHEMA_VERSION = 2
+
+
+def iter_dataset_pairs(spec, data_root: Path, max_pairs: int | None, seed: int | None):
+    """All of the dataset's pairs, then a seeded scene-balanced subset if capped."""
+    pairs = spec.iter_pairs(data_root, max_pairs=None, **(spec.kwargs or {}))
+    return sample_pairs(pairs, max_pairs, seed=seed)
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -82,7 +93,7 @@ def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
                                Path(pair.get("im_A_path", "?")),
                                Path(pair.get("im_B_path", "?")),
                                e, n_failures)
-    _warn_summary("_qualitative_sweep", len(times), n_failures,
+    _warn_summary("_qualitative_sweep", len(times) + n_failures, n_failures,
                   "excluded from the qualitative aggregate.")
     return {
         "mean_time_s": float(np.mean(times)) if times else 0.0,
@@ -180,7 +191,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
         raise SystemExit(
             f"Dataset '{dataset}' not found at {data_root}.\n"
             f"  -> Run `visbench download {dataset}` (if supported), or pass --data-root.\n"
-            f"  -> See visbench/datasets/{dataset}.py for source URL."
+            f"  -> Source: {spec.source_url or 'see the dataset module docstring'}"
         )
 
     matcher = build_matcher(method, device=device)
@@ -188,7 +199,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
     # tartanair_wide, etc. all differ only by the kwargs they hand iter_pairs).
     # Production used to drop these, silently making `_wide`/`_hard` variants
     # identical to their base.
-    pairs = spec.iter_pairs(data_root, max_pairs=max_pairs, **(spec.kwargs or {}))
+    pairs = iter_dataset_pairs(spec, data_root, max_pairs, seed)
     resize_long = resize if resize is not None else spec.default_resize
 
     t0 = time.time()
@@ -198,6 +209,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
     metrics["total_time_s"] = time.time() - t0
 
     record = {
+        "schema_version": RESULT_SCHEMA_VERSION,
         "dataset": dataset, "method": method, "device": device,
         "data_root": str(data_root), "max_pairs": max_pairs,
         "seed": seed,

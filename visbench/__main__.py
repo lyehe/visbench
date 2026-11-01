@@ -19,25 +19,22 @@ import sys
 from pathlib import Path
 
 
-# Shared training-data store on the lab workstation; used when ./datasets is absent.
-_MATCHER_TRAINING_ROOT = Path(r"D:\Yehe\matcher_training")
-
-
 def _default_data_root() -> Path:
-    """Where datasets live by default: $VISBENCH_DATA_ROOT, else ./datasets, else
-    D:\\Yehe\\matcher_training when ./datasets is missing and that store exists."""
+    """Where datasets live by default: $VISBENCH_DATA_ROOT, else ./datasets."""
     env = os.environ.get("VISBENCH_DATA_ROOT")
     if env:
         return Path(env)
-    local = Path.cwd() / "datasets"
-    if not local.exists() and _MATCHER_TRAINING_ROOT.is_dir():
-        return _MATCHER_TRAINING_ROOT
-    return local
+    return Path.cwd() / "datasets"
 
 
 def _setup_caches(data_root: Path) -> None:
-    if data_root == _MATCHER_TRAINING_ROOT:
-        return  # shared data store: keep the user's default HF/torch caches, write nothing there
+    """Point model/HF caches under the data root unless the user set them.
+
+    Set VISBENCH_KEEP_CACHES=1 to leave HF_HOME / TORCH_HOME untouched (useful
+    when the data root is a shared, read-mostly store).
+    """
+    if os.environ.get("VISBENCH_KEEP_CACHES") == "1":
+        return
     cache_root = data_root / "_cache"
     os.environ.setdefault("HF_HOME", str(cache_root / "hf"))
     os.environ.setdefault("HF_HUB_CACHE", str(cache_root / "hf" / "hub"))
@@ -148,10 +145,11 @@ def _cmd_batch(args):
     datasets = [s.strip() for s in args.datasets.split(",") if s.strip()]
     device = args.device or _default_device()
 
-    mp = {}
+    from .orchestrators.batch import per_dataset_max_pairs
     if args.max_pairs is not None:
-        for ds in datasets:
-            mp[ds] = args.max_pairs
+        mp = {ds: args.max_pairs for ds in datasets}
+    else:
+        mp = per_dataset_max_pairs(datasets, args.max_pairs_pose, args.max_pairs_homography)
 
     run_batch(
         method=args.method, datasets=datasets,
@@ -203,9 +201,14 @@ def _cmd_standard(args):
 
 def _cmd_report(args):
     from .orchestrators.reporting import report
-    report(Path(args.results_dir), top_k=args.top_k,
+    panel = None
+    if args.panel:
+        from .orchestrators.standard import _read_panel
+        panel = _read_panel(_resolve_panel(args.panel))
+    report(Path(args.results_dir), top_k=args.top_k, panel=panel,
            show_reference=not args.no_reference,
-           json_out=Path(args.json_out) if args.json_out else None)
+           json_out=Path(args.json_out) if args.json_out else None,
+           matrix_metric=args.matrix_metric)
 
 
 def _resolve_panel(name_or_path: str) -> Path:
@@ -245,7 +248,7 @@ def _build_parser() -> argparse.ArgumentParser:
     pd.add_argument("--all-auto", action="store_true",
                     help="Try every dataset's download() (skips on NotImplementedError).")
     pd.add_argument("--data-root", default=None,
-                    help="Override the default data root (default: $VISBENCH_DATA_ROOT, else ./datasets/, else D:/Yehe/matcher_training).")
+                    help="Override the default data root (default: $VISBENCH_DATA_ROOT, else ./datasets/).")
     pd.set_defaults(func=_cmd_download)
 
     # run
@@ -290,6 +293,11 @@ def _build_parser() -> argparse.ArgumentParser:
                     help="Base data directory (default: $VISBENCH_DATA_ROOT or ./datasets/).")
     pb.add_argument("--max-pairs", type=int, default=None,
                     help="Apply the same per-dataset cap (default: full datasets).")
+    pb.add_argument("--max-pairs-pose", type=int, default=None,
+                    help="Cap pairs on pose-task datasets (ignored when --max-pairs is set).")
+    pb.add_argument("--max-pairs-homography", type=int, default=None,
+                    help="Cap pairs on homography/correspondence/fundamental datasets "
+                    "(ignored when --max-pairs is set).")
     pb.add_argument("--ransac-runs", type=int, default=5,
                     help="Number of RANSAC shuffles for pose datasets (default: 5).")
     pb.add_argument("--device", default=None,
@@ -345,6 +353,11 @@ def _build_parser() -> argparse.ArgumentParser:
     prp.add_argument("--json-out", default=None,
                      help="Write the aggregated report as JSON to this path "
                      "(in addition to printing the table to stdout).")
+    prp.add_argument("--panel", default=None,
+                     help="Panel name or .txt of datasets to report, in order "
+                     "(default: panels/core.txt datasets present, else all).")
+    prp.add_argument("--matrix-metric", default=None,
+                     help="Metric key for every matrix cell (default: each dataset's ranking metric).")
     prp.set_defaults(func=_cmd_report)
 
     return p

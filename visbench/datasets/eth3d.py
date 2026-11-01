@@ -69,9 +69,14 @@ def _parse_colmap_cameras(path: Path) -> dict:
 def _parse_colmap_images(path: Path) -> dict:
     """name -> (R, t, cam_id, observed point3D ids)."""
     out = {}
-    lines = [l for l in path.read_text().splitlines() if l and not l.startswith("#")]
+    # Keep blank lines: COLMAP writes an empty points line for an image with no
+    # observations, and dropping it would shift every later image by a record.
+    lines = [l for l in path.read_text().splitlines() if not l.startswith("#")]
     i = 0
     while i < len(lines):
+        if not lines[i].strip():
+            i += 1
+            continue
         tok = lines[i].split()
         qw, qx, qy, qz = map(float, tok[1:5])
         tx, ty, tz = map(float, tok[5:8])

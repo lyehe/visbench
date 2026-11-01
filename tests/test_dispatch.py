@@ -129,18 +129,6 @@ def test_qualitative_warns_on_pair_failure(tmp_path):
         f"expected per-pair warning, got: {[str(w.message) for w in caught]}"
 
 
-def test_eval_fundamental_pairs_handles_empty_iter():
-    """No pairs → returns dict (no crash). Validates the function signature."""
-    import warnings
-    matcher = StubMatcher()
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # zero-pairs warning
-        res = eval_fundamental_pairs(matcher, iter([]), resize_long=None, progress=False)
-    json.dumps(res)
-    assert res["num_pair_failures"] == 0
-    assert res["mean_matches"] == 0.0
-
-
 @pytest.mark.parametrize("eval_fn", [
     eval_pose_pairs,
     eval_homography_pairs,
@@ -148,14 +136,11 @@ def test_eval_fundamental_pairs_handles_empty_iter():
     eval_descriptor_pairs,
     eval_fundamental_pairs,
 ])
-def test_each_eval_handles_empty_iter(eval_fn):
-    """Every task-level eval function must tolerate an empty iterator."""
-    import warnings
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        res = eval_fn(StubMatcher(), iter([]), progress=False)
-    json.dumps(res)
-    assert isinstance(res, dict)
+def test_each_eval_rejects_empty_iter(eval_fn):
+    """Zero pairs means missing data or a bad layout, never a score of 0."""
+    from visbench.core.sampling import EmptyPairsError
+    with pytest.raises(EmptyPairsError):
+        eval_fn(StubMatcher(), iter([]), progress=False)
 
 
 def test_every_registered_dataset_has_a_dispatcher_path():
