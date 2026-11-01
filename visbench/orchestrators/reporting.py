@@ -104,6 +104,19 @@ def _value(metrics: dict, key: str):
     return float(v) if isinstance(v, (int, float)) else None
 
 
+def short_name(method: str) -> str:
+    """Compact method label for tables: `vismatch:loma-g` -> `loma-g`,
+    `romaxx:flexglue-trt:<dir>` -> `flexglue-trt:<dir name>`."""
+    if method.startswith("vismatch:"):
+        return method.split(":", 1)[1]
+    if method.startswith("romaxx:"):
+        kind, _, arg = method.split(":", 1)[1].partition(":")
+        if "/" in arg or "\\" in arg:
+            arg = Path(arg.replace("\\", "/").rstrip("/")).name
+        return f"{kind}:{arg}" if arg else kind
+    return method
+
+
 def _fmt(v) -> str:
     return f"{v:.3f}" if v is not None else " n/a "
 
@@ -165,7 +178,7 @@ def report(results_dir: Path, top_k: int = 25,
         print(f"### {ds}  ({task}: {' / '.join(labels)})\n")
         print(f"  {'method':<45} " + "  ".join(f"{label:>8}" for label in labels))
         for kind, name, vals in ranked:
-            label = (f"ref: {name}" if kind == "ref" else name)[:43]
+            label = (f"ref: {name}" if kind == "ref" else short_name(name))[:43]
             print(f"  {label:<45} " + "  ".join(f"{_fmt(v):>8}" for v in vals))
         if show_reference and ref_note:
             prefix = "(no published reference) -- " if not ref_ds else ""
@@ -189,7 +202,7 @@ def report(results_dir: Path, top_k: int = 25,
     combined.sort(key=lambda x: -x[1])
     print("  " + f"{'method':<46} mean   n_ds  " + "  ".join(ds[:8] for ds in panel))
     for name, mean, n, cells in combined[:top_k]:
-        print(f"  {name[:44]:<46} {mean:.3f}  {n:<4}  " + "  ".join(f"{_fmt(v):>8}" for v in cells))
+        print(f"  {short_name(name)[:44]:<46} {mean:.3f}  {n:<4}  " + "  ".join(f"{_fmt(v):>8}" for v in cells))
         payload["combined"].append({"method": name, "mean": mean, "n_datasets": n,
                                     "cells": [{"dataset": ds, "value": v} for ds, v in zip(panel, cells)]})
 
@@ -198,7 +211,9 @@ def report(results_dir: Path, top_k: int = 25,
     print(f"\n## Matrix ({matrix_metric or 'ranking metric per dataset'}; rows = datasets)\n")
     methods = sorted(rows)
     width = max([len(ds) for ds in panel] + [8])
-    print("  " + f"{'dataset':<{width}} " + "  ".join(f"{m[:12]:>12}" for m in methods))
+    labels = [short_name(m) for m in methods]
+    col = max([len(lb) for lb in labels] + [8])
+    print("  " + f"{'dataset':<{width}} " + "  ".join(f"{lb:>{col}}" for lb in labels))
     for name in methods:
         payload["matrix"][name] = {}
     for ds in panel:
@@ -208,7 +223,7 @@ def report(results_dir: Path, top_k: int = 25,
             v = _value(rows[name][ds], key) if ds in rows[name] else None
             payload["matrix"][name][ds] = v
             vals.append(v)
-        print("  " + f"{ds:<{width}} " + "  ".join(f"{_fmt(v):>12}" for v in vals))
+        print("  " + f"{ds:<{width}} " + "  ".join(f"{_fmt(v):>{col}}" for v in vals))
     print()
 
     if json_out is not None:

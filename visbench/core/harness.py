@@ -127,6 +127,14 @@ def _prepare_pair_images(matcher, im_A_path, im_B_path,
     w0, h0 = _pil_size(im_A_path)
     w1, h1 = _pil_size(im_B_path)
 
+    if getattr(matcher, "consumes_paths", False):
+        # The matcher reads and resizes the files itself (its own reference
+        # protocol) and returns matches in original-image pixels.
+        return (str(im_A_path), str(im_B_path),
+                (w0, h0), (w1, h1),
+                (h0, w0), (h1, w1),
+                (1.0, 1.0), (1.0, 1.0))
+
     if resize_hw is not None:
         nh0, nw0 = int(resize_hw[0]), int(resize_hw[1])
         nh1, nw1 = nh0, nw0

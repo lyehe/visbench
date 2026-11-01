@@ -14,7 +14,7 @@ from typing import Callable
 class MethodSpec:
     name: str
     builder: Callable  # (device: str) -> matcher
-    kind: str = "classical"  # informational: "classical" | "vismatch" | "romaxx"
+    kind: str = "classical"  # informational: "classical" | "vismatch" | "loma" | "romaxx"
 
 
 _REGISTRY: dict[str, MethodSpec] = {}
@@ -67,6 +67,10 @@ def get(name: str) -> MethodSpec:
         sub = name.split(":", 1)[1]
         return MethodSpec(name=name, builder=lambda dev, _n=sub: build_vismatch(_n, dev),
                           kind="vismatch")
+    if name.startswith("loma:"):
+        from .loma_official import build_loma_official
+        return MethodSpec(name=name, builder=lambda dev, _n=name: build_loma_official(_n, dev),
+                          kind="loma")
     if name.startswith("romaxx:"):
         from .romaxx_loader import build_romaxx
         return MethodSpec(name=name, builder=lambda dev, _n=name: build_romaxx(_n, dev),

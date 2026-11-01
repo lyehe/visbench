@@ -212,3 +212,53 @@ def test_romaxx_parse_converts_msys_paths(monkeypatch):
     assert romaxx_loader.parse("romaxx:flexglue-trt:/c/b/core") == ("flexglue-trt", "C:/b/core")
     assert romaxx_loader.parse("romaxx:flexglue-trt:C:/b/core") == ("flexglue-trt", "C:/b/core")
     assert romaxx_loader.parse("romaxx:romatrt:fast") == ("romatrt", "fast")
+
+
+def test_path_consuming_matcher_scores_in_original_frame(tmp_path):
+    """consumes_paths: the harness passes file paths and does not rescale."""
+    from visbench.core.harness import eval_correspondence_pairs
+    Image.new("RGB", (400, 300)).save(tmp_path / "a.png")
+    Image.new("RGB", (400, 300)).save(tmp_path / "b.png")
+    rng = np.random.default_rng(0)
+    pts = rng.uniform([10, 10], [390, 290], size=(200, 2))
+    shift = np.array([7.0, -3.0])
+
+    class PathMatcher:
+        consumes_paths = True
+
+        def load_image(self, p, resize=None):
+            raise AssertionError("must not be called")
+
+        def __call__(self, a, b):
+            assert a.endswith("a.png") and b.endswith("b.png")
+            return {"matched_kpts0": pts, "matched_kpts1": pts + shift}
+
+    gt = np.c_[pts[:20], pts[:20] + shift]
+    pair = {"im_A_path": str(tmp_path / "a.png"), "im_B_path": str(tmp_path / "b.png"), "corrs": gt}
+    out = eval_correspondence_pairs(PathMatcher(), [pair], resize_long=128, progress=False)
+    assert out["all_mAA_10"] > 0.9
+
+
+def test_loma_official_wraps_path_api():
+    from visbench.methods import get
+    from visbench.methods.loma_official import LoMaOfficialMatcher
+
+    class FakeLoMa:
+        def match(self, a, b, num_keypoints):
+            assert num_keypoints == 4096
+            return np.array([[1.0, 2.0]]), np.array([[3.0, 4.0]])
+
+    m = LoMaOfficialMatcher("g", model=FakeLoMa())
+    assert m.consumes_paths and m.load_image("x.jpg", resize=(10, 10)) == "x.jpg"
+    out = m("a.jpg", "b.jpg")
+    np.testing.assert_allclose(out["matched_kpts1"], [[3.0, 4.0]])
+    assert get("loma:g").kind == "loma"
+    with pytest.raises(ValueError):
+        LoMaOfficialMatcher("xl", model=FakeLoMa())
+
+
+def test_short_method_names():
+    from visbench.orchestrators.reporting import short_name
+    assert short_name("vismatch:loma-g") == "loma-g"
+    assert short_name("romaxx:flexglue-trt:C:/b/flexglue_native_512_core") == "flexglue-trt:flexglue_native_512_core"
+    assert short_name("romaxx:romatrt:fast") == "romatrt:fast"
