@@ -1,13 +1,12 @@
-# Extended panel: core plus harder and rotated splits.
+# Extended panel: core plus rotated splits and ETH3D (visbench-mined pairs,
+# not paper-comparable; useful as a multi-view indoor/outdoor check).
 megadepth1500
-megadepth_lo_overlap
 megadepth1500_rot90
 hardmatch
 hardmatch_rot90
 wxbs
 wxbs_rot90
-eth3d
-aachen_v1_1
 hpatches
 hpatches_rot90
 satast
+eth3d

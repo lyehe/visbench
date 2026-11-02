@@ -8,18 +8,17 @@ should be compared with. The harness implements each reference protocol, so a
 
 | Question | Run |
 |---|---|
-| Standard comparison, as in recent papers | `visbench standard --panel core` (MegaDepth-1500, HardMatch, WxBS, ETH3D, HPatches) |
+| Standard comparison, as in recent papers | `visbench standard --panel core` (MegaDepth-1500, HardMatch, WxBS, HPatches, SatAst) |
 | Hard appearance change (sketch↔photo, day↔night, decades apart, aerial↔ground) | `hardmatch` |
 | Wide baseline + modality change | `wxbs` |
 | Rotation robustness | `megadepth1500_rot90`, `hardmatch_rot90`, `wxbs_rot90`, `hpatches_rot{45,90,180}` |
 | Extreme scale + rotation | `satast` |
-| Low overlap | `megadepth_lo_overlap` |
 | Cross-modal (thermal, depth, event, medical) | `--panel crossmodal` |
 | Which degradation breaks a method | `--panel stress` |
 
 ## Protocols
 
-### Pose — `megadepth1500*`, `eth3d`, `aachen_v1_1*`, MINIMA pose sets
+### Pose — `megadepth1500*`, `eth3d`, MINIMA pose sets
 
 LoFTR / RoMa / LoMa protocol: long side resized to `default_resize` (1200 for
 MegaDepth and ETH3D) with K scaled per axis; essential matrix via

@@ -4,7 +4,7 @@ Benchmark harness for visual feature matching:
 
 - **Benchmarks recent papers report** — MegaDepth-1500, HardMatch, WxBS, ETH3D,
   HPatches, SatAst, the MINIMA cross-modal suite, rotated splits and a compact
-  stress set (35 datasets, all public; see [DATASETS.md](DATASETS.md)).
+  stress set (31 datasets, all public; see [DATASETS.md](DATASETS.md)).
 - **Reference protocols** — each task reproduces its paper's evaluator (pose
   AUC, WxBS/HardMatch mAA, HPatches corner AUC, SatAst reprojection AUC), with
   published scores alongside ([BENCHMARKS.md](BENCHMARKS.md)).
@@ -44,7 +44,6 @@ git -C third_party/vismatch submodule update --init vismatch/third_party/LoMa
 
 Optional:
 
-- `uv pip install -e .[aachen]` — pycolmap for the Aachen pose sets.
 - **RoMaXX** (`romaxx:` methods) — RoMaXX is not on PyPI and pins its own torch
   (FlexGlue bundles require Torch 2.11 + TensorRT 10.16). Run `romaxx:` methods
   from RoMaXX's environment with visbench on the path; vismatch is not needed
@@ -70,12 +69,12 @@ visbench download hardmatch
 visbench check hardmatch                 # sanity-check the ground truth on CPU
 visbench run --dataset hardmatch --method vismatch:loma-g --out results/hardmatch__loma-g.json
 
-# Core panel (MegaDepth-1500, HardMatch, WxBS, ETH3D, HPatches) x methods:
+# Core panel (MegaDepth-1500, HardMatch, WxBS, HPatches, SatAst) x methods:
 visbench standard --panel core --methods panels/sota_methods.txt --out-dir results/
 visbench report --results-dir results/            # rankings, leaderboard, matrix
 ```
 
-Panels: `core`, `extended` (rotated and harder splits, SatAst, Aachen),
+Panels: `core`, `extended` (adds rotated splits and ETH3D),
 `crossmodal`, `stress`. Method lists: `panels/*_methods.txt`.
 
 `--max-pairs` (or `--max-pairs-pose` / `--max-pairs-homography`) evaluates a

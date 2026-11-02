@@ -1,6 +1,6 @@
 # Dataset catalog
 
-Every registered dataset, grouped as in `visbench/datasets/`. All are publicly
+Every registered dataset (31), grouped as in `visbench/datasets/`. All are publicly
 downloadable without a registration form; `visbench download <name>` fetches
 them or prints the exact manual step. `visbench check <name>` verifies a local
 copy's ground truth before you trust its numbers.
@@ -14,9 +14,7 @@ Each module exposes `download(data_root)` and `iter_pairs(data_root, max_pairs=N
 |---|---|---:|---|---|
 | `megadepth1500` | `megadepth` | 1500 | [LoFTR test split](https://github.com/zju3dv/LoFTR) | Apache 2.0 (split); MegaDepth images per source |
 | `megadepth1500_rot90` | `megadepth` | 1500 | same pairs, image B rotated 90° CCW with K and pose transformed | same |
-| `megadepth_lo_overlap` | `megadepth` | 600 | lowest-overlap bins of the same scenes | same |
-| `eth3d` | `eth3d` | 2561 | [ETH3D high-res multi-view](https://www.eth3d.net/datasets), top-5 co-visible partners per image | CC BY-NC-SA 4.0 |
-| `aachen_v1_1`, `aachen_v1_1_hard` | `aachen_v1.1` | model-dependent | [Aachen Day-Night v1.1](https://data.ciirc.cvut.cz/public/projects/2020VisualLocalization/Aachen-Day-Night/) database SfM pairs; needs `pycolmap` (`pip install visbench[aachen]`) | Academic |
+| `eth3d` | `eth3d` | 2561 | [ETH3D high-res multi-view](https://www.eth3d.net/datasets); pairs mined by visbench (top-5 co-visible partners per image), so not paper-comparable | CC BY-NC-SA 4.0 |
 
 ## Correspondence — WxBS protocol, mAA@10px (`datasets/correspondence/`)
 
@@ -34,7 +32,6 @@ Each module exposes `download(data_root)` and `iter_pairs(data_root, max_pairs=N
 |---|---|---:|---|---|
 | `hpatches` | `hpatches` | 580 | corner-error AUC@3/5/10px, MMA | [HPatches](https://github.com/hpatches/hpatches-dataset) (CC BY-NC-SA 4.0) |
 | `hpatches_rot45`, `_rot90`, `_rot180` | `hpatches` | 580 each | same | in-plane rotation of image B |
-| `hpatches_patches` | `hpatches` | — | descriptor top-1 / mAP | descriptor isolation on fixed keypoints |
 | `satast` | `satast` | 39 | pooled reprojection AUC@10px | [SatAst](https://github.com/georg-bn/satast); `visbench download satast` fetches the annotations and, with `rsync` on `PATH`, the 78 images (126 MB). Keep the root short on Windows: file names are ~150 characters |
 
 ## Cross-modal — MINIMA suite (`datasets/crossmodal/`)
@@ -68,3 +65,11 @@ HPatches data.
   7-Scenes, KITTI, DTU, CO3D, BlendedMVS, TartanAir, EVD, ZEB, IMC
   PhotoTourism, the resolution sweep, and the speed-only Aachen / InLoc pair
   lists. They remain in git history (`git log -- visbench/datasets/`).
+- **Removed in the 2026-11 relevance review**:
+  - `aachen_v1_1` / `aachen_v1_1_hard`: the loader read SIMPLE_RADIAL
+    intrinsics as PINHOLE (fy was set to cx), so K was wrong; and daytime
+    database pairs are not the Aachen localization benchmark papers report.
+  - `megadepth_lo_overlap`: the two lowest-overlap bins of MegaDepth-1500,
+    i.e. a 600-pair subset of it.
+  - `hpatches_patches`: descriptor-only, and only classical OpenCV methods
+    can run it.

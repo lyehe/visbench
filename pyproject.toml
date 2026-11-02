@@ -38,8 +38,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff==0.14.5"]
-# Aachen v1.1 reads its COLMAP model with pycolmap.
-aachen = ["pycolmap"]
 # romaxx:<kind> methods need RoMaXX installed in the same environment
 # (it is not on PyPI; e.g. `uv pip install -e <path-to-romaxx>`).
 

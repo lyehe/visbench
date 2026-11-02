@@ -197,7 +197,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
         )
 
     matcher = build_matcher(method, device=device)
-    # Forward spec.kwargs (e.g. aachen_v1_1 vs aachen_v1_1_hard differ only by
+    # Forward spec.kwargs (e.g. hardmatch vs hardmatch_rot90 differ only by
     # the kwargs they hand iter_pairs).
     # Production used to drop these, silently making `_wide`/`_hard` variants
     # identical to their base.
