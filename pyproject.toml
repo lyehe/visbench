@@ -26,7 +26,7 @@ dependencies = [
   # Listed explicitly so [tool.uv.sources] resolves the CUDA build: vismatch
   # needs it (ALIKED's deformable convolution) and PyPI's wheel is CPU-only.
   "torchvision>=0.15",
-  "opencv-python>=4.5.4",
+  "opencv-python>=4.5.4,<5",  # 5.0 drops AKAZE_create / BRISK_create (classical baselines)
   "numpy",
   "scipy",
   "pillow",
