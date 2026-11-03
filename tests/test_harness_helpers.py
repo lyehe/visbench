@@ -7,13 +7,10 @@ helpers introduced or refactored during the audit pass.
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from visbench.core.harness import (
-    _compute_map_topk,
     _epi_distance,
     _scale_K,
-    DEFAULT_KPT_SIZE_PX,
     MIN_FUND_MATCHES,
     MIN_HOMOG_MATCHES,
     MIN_POSE_MATCHES,
@@ -43,37 +40,6 @@ def test_scale_K_does_not_mutate_input():
     np.testing.assert_array_equal(K, K_copy)
 
 
-# ----- _compute_map_topk ----------------------------------------------------
-
-def test_map_topk_perfect_identity():
-    """Identical descriptors → rank 0 everywhere → top1=1, mAP=1."""
-    d = np.eye(8, dtype=np.float32)
-    res = _compute_map_topk(d, d, metric="l2")
-    assert res["n"] == 8
-    assert res["top1_acc"] == pytest.approx(1.0)
-    assert res["top5_acc"] == pytest.approx(1.0)
-    assert res["mAP"] == pytest.approx(1.0)
-
-
-def test_map_topk_hamming_perfect():
-    """uint8 descriptors with hamming metric, identity case."""
-    d = np.eye(8, dtype=np.uint8)
-    # Pack to bytes: 1 column -> bit 0; just ensure rank order is correct.
-    d_bytes = np.packbits(d, axis=1)
-    res = _compute_map_topk(d_bytes, d_bytes, metric="hamming")
-    assert res["top1_acc"] == pytest.approx(1.0)
-
-
-def test_map_topk_empty_inputs():
-    res = _compute_map_topk(np.empty((0, 8)), np.empty((0, 8)))
-    assert res == {"top1_acc": 0.0, "top5_acc": 0.0, "mAP": 0.0, "n": 0}
-
-
-def test_map_topk_mismatched_lengths_returns_zero():
-    res = _compute_map_topk(np.eye(4), np.eye(5))
-    assert res["n"] == 0
-
-
 # ----- _epi_distance --------------------------------------------------------
 
 def test_epi_distance_matching_corresponds_to_zero_residual():
@@ -87,7 +53,7 @@ def test_epi_distance_matching_corresponds_to_zero_residual():
     kpts0 = np.array([[3.0, 5.0], [10.0, 7.0]])
     kpts1 = np.array([[3.0, 5.0], [10.0, 7.0]])
     d = _epi_distance(F, kpts0, kpts1)
-    np.testing.assert_allclose(d, 0.0, atol=1e-9)
+    np.testing.assert_allclose(d, 0.0, atol=1e-3)  # the reference adds 1e-8 under the sqrt
 
 
 def test_epi_distance_none_F_returns_inf():
@@ -140,4 +106,3 @@ def test_min_match_constants():
     assert MIN_FUND_MATCHES == 8      # 8-point fundamental matrix
     assert MIN_HOMOG_MATCHES == 4     # 4 point pairs for homography
     assert POSE_FAIL_DEG == 90.0
-    assert DEFAULT_KPT_SIZE_PX == 8.0

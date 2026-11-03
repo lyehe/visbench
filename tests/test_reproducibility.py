@@ -1,8 +1,5 @@
-"""Tests for the reproducibility + DX improvements made during the audit pass.
-
-- `eval_pose_pairs(seed=...)` produces deterministic AUCs across runs.
-- CLI `--rerun` is an alias for `--no-skip`.
-- `report(json_out=...)` writes a structured JSON sidecar.
+"""Reproducibility: seeded pose AUCs are deterministic, `--rerun` aliases
+`--no-skip`, and `report(json_out=...)` writes a JSON sidecar.
 """
 
 from __future__ import annotations

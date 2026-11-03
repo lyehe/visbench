@@ -43,9 +43,6 @@ class SIFTFeature(CustomFeatureMatcher):
                                      contrastThreshold=contrast_threshold,
                                      edgeThreshold=edge_threshold)
 
-    def get_cv_feature(self):
-        return self._sift
-
     def detect_and_describe(self, img_u8):
         pts, desc = _detect_and_describe_cv(self._sift, img_u8, 128, np.float32)
         return pts, desc.astype(np.float32) if len(desc) else desc
@@ -77,9 +74,6 @@ class ORBFeature(CustomFeatureMatcher):
         super().__init__(device=device, **kwargs)
         self._orb = cv2.ORB_create(nfeatures=max_kpts, scaleFactor=scale_factor, nlevels=n_levels)
 
-    def get_cv_feature(self):
-        return self._orb
-
     def detect_and_describe(self, img_u8):
         return _detect_and_describe_cv(self._orb, img_u8, 32, np.uint8)
 
@@ -92,9 +86,6 @@ class AKAZEFeature(CustomFeatureMatcher):
         super().__init__(device=device, **kwargs)
         self._akaze = cv2.AKAZE_create(threshold=threshold)
 
-    def get_cv_feature(self):
-        return self._akaze
-
     def detect_and_describe(self, img_u8):
         return _detect_and_describe_cv(self._akaze, img_u8, 61, np.uint8)
 
@@ -106,9 +97,6 @@ class BRISKFeature(CustomFeatureMatcher):
     def __init__(self, threshold: int = 30, octaves: int = 3, device: str = "cpu", **kwargs):
         super().__init__(device=device, **kwargs)
         self._brisk = cv2.BRISK_create(thresh=threshold, octaves=octaves)
-
-    def get_cv_feature(self):
-        return self._brisk
 
     def detect_and_describe(self, img_u8):
         return _detect_and_describe_cv(self._brisk, img_u8, 64, np.uint8)

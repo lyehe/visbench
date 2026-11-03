@@ -1,15 +1,5 @@
-"""Regression tests for the two critical bugs the audit found.
-
-1. mutual_nearest_neighbor's Lowe ratio test used `np.partition(d01, 2)[:, :2]`,
-   which leaves elements [0, 1] in unspecified order. The "best" and
-   "second-best" distances could be swapped, randomly corrupting half the
-   ratio-test decisions on every SIFT/RootSIFT match.
-
-2. synthetic_geometric._perspective / _random_affine captured an RNG at
-   module import time. On a second iter_pairs() call within the same process,
-   the cached warped image (from the first call's RNG draw) was paired with a
-   newly-computed H_aug (from a different RNG state), silently desyncing H_gt
-   from the on-disk image.
+"""Regression tests: Lowe ratio-test ordering, deterministic synthetic warps,
+and dataset kwargs forwarding in run_one.
 """
 
 from __future__ import annotations
@@ -79,17 +69,6 @@ def test_perspective_make_is_pure_function_of_wh():
     assert dims1 == dims1_again
 
 
-def test_random_affine_make_is_pure_function_of_wh():
-    from visbench.datasets.stress.synthetic_geometric import _random_affine
-    fn = _random_affine(seed=7)
-    H1, _ = fn(640, 480)
-    for _ in range(20):
-        fn(800, 600)
-        fn(320, 240)
-    H1_again, _ = fn(640, 480)
-    np.testing.assert_array_equal(H1, H1_again)
-
-
 def test_two_calls_to_iter_pairs_produce_same_H():
     """End-to-end: a second iter_pairs() in the same process should yield the
     same H_gt as the first (the previous bug silently desynced cache and H_gt).
@@ -119,7 +98,7 @@ def test_run_one_forwards_spec_kwargs(monkeypatch, tmp_path):
         return iter([])
 
     spec = DatasetSpec(
-        task="qualitative", iter_pairs=fake_iter,
+        task="homography", iter_pairs=fake_iter,
         default_root=Path("dummy"), source_url="x",
         kwargs={"my_test_flag": "expected_value"},
     )

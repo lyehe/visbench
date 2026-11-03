@@ -311,7 +311,7 @@ def _build_parser() -> argparse.ArgumentParser:
     pb.add_argument("--max-pairs-pose", type=int, default=None,
                     help="Cap pairs on pose-task datasets (ignored when --max-pairs is set).")
     pb.add_argument("--max-pairs-homography", type=int, default=None,
-                    help="Cap pairs on homography/correspondence/fundamental datasets "
+                    help="Cap pairs on homography/correspondence/SatAst datasets "
                     "(ignored when --max-pairs is set).")
     pb.add_argument("--ransac-runs", type=int, default=5,
                     help="Number of RANSAC shuffles for pose datasets (default: 5).")
@@ -338,7 +338,7 @@ def _build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--max-pairs-pose", type=int, default=None,
                     help="Cap pairs on pose-task datasets (default: full).")
     ps.add_argument("--max-pairs-homography", type=int, default=None,
-                    help="Cap pairs on homography/correspondence/fundamental "
+                    help="Cap pairs on homography/correspondence/SatAst "
                     "datasets (default: full).")
     ps.add_argument("--ransac-runs", type=int, default=5,
                     help="Number of RANSAC shuffles for pose datasets (default: 5).")

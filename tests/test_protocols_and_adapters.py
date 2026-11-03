@@ -1,4 +1,4 @@
-"""CPU tests for HardMatch, SatAst, rotated variants, and the romaxx / LoMa method adapters."""
+"""Protocol tests for HardMatch, WxBS, SatAst and the rotated variants, plus the romaxx / LoMa method adapters."""
 
 from __future__ import annotations
 
@@ -24,13 +24,13 @@ def _reference_sed(p1, p2, F, eps=1e-8):
     return np.sqrt(num * den + eps)
 
 
-def test_epi_distance_hz_matches_reference():
-    from visbench.core.harness import _epi_distance_hz
+def test_epi_distance_matches_reference():
+    from visbench.core.harness import _epi_distance
     rng = np.random.default_rng(0)
     F = rng.normal(size=(3, 3))
     p0 = rng.uniform(0, 800, size=(50, 2))
     p1 = rng.uniform(0, 800, size=(50, 2))
-    np.testing.assert_allclose(_epi_distance_hz(F, p0, p1), _reference_sed(p0[None], p1[None], F[None])[0], rtol=1e-9)
+    np.testing.assert_allclose(_epi_distance(F, p0, p1), _reference_sed(p0[None], p1[None], F[None])[0], rtol=1e-9)
 
 
 # --- rotation helpers ---------------------------------------------------------

@@ -10,7 +10,6 @@ import numpy as np
 from tqdm import tqdm
 
 from . import _image_cache
-from .imageio import imread
 from .sampling import EmptyPairsError  # noqa: F401  (re-exported)
 from .metrics._constants import (
     FUND_RANSAC_CONF,
@@ -43,12 +42,10 @@ from .metrics.classical import (
 POSE_RANSAC_PX = float(os.environ.get("VISBENCH_POSE_RANSAC_PX", 0.5))
 HOMOG_RANSAC_PX_BASE = float(os.environ.get("VISBENCH_HOMOG_RANSAC_PX_BASE", 3.0))
 HOMOG_REF_MIN_SIDE = 480.0  # HPatches-canonical threshold-scaling reference.
-FUND_RANSAC_PX = float(os.environ.get("VISBENCH_FUND_RANSAC_PX", 0.5))
 # WxBS / HardMatch reference evaluators fit F with MAGSAC at 0.25 px.
 CORR_RANSAC_PX = float(os.environ.get("VISBENCH_CORR_RANSAC_PX", 0.25))
 
 # Per-pair eval defaults.
-DEFAULT_KPT_SIZE_PX = 8.0
 EPI_PRECISION_THRESH_PX = 2.0
 WARN_FAILURE_LIMIT = 3  # Stop spamming after this many per-pair failure warnings.
 
@@ -96,9 +93,7 @@ def _safe_mean(seq) -> float:
 
 def _append_by_subset(buckets: dict, subset: str, value) -> None:
     """Append `value` to buckets[subset] and (if subset != 'all') also to
-    buckets['all']. Centralises the per-subset+overall aggregation idiom and
-    avoids the double-append bug when subset itself is 'all' (which previously
-    inflated num_pairs to 2x for datasets that don't set a subset)."""
+    buckets['all'], so a pair whose subset is already 'all' is counted once."""
     buckets.setdefault(subset, []).append(value)
     if subset != "all":
         buckets.setdefault("all", []).append(value)
@@ -478,25 +473,10 @@ def eval_point_homography_pairs(matcher, pairs, resize_long: int | None = None,
 
 
 def _epi_distance(F, kpts0, kpts1):
-    if F is None or len(kpts0) == 0:
-        return np.full((len(kpts0),), np.inf, dtype=np.float64)
-    h0 = np.concatenate([kpts0, np.ones((len(kpts0), 1))], axis=1)
-    h1 = np.concatenate([kpts1, np.ones((len(kpts1), 1))], axis=1)
-    Fx0 = h0 @ F.T
-    Ftx1 = h1 @ F
-    num = np.abs((h1 * Fx0).sum(axis=1))
-    n1 = np.sqrt(Fx0[:, 0] ** 2 + Fx0[:, 1] ** 2)
-    n0 = np.sqrt(Ftx1[:, 0] ** 2 + Ftx1[:, 1] ** 2)
-    return num / np.maximum(n1, _EPS) + num / np.maximum(n0, _EPS)
-
-
-def _epi_distance_hz(F, kpts0, kpts1):
     """Symmetric epipolar distance, Hartley & Zisserman eq. 11.10.
 
     sqrt(r^2 * (1/|F x0|_12^2 + 1/|F^T x1|_12^2)): the form used by the WxBS
-    and HardMatch reference evaluators. `_epi_distance` (sum of the two
-    point-to-line distances) is about 1.4x larger and is kept for the
-    `fundamental` task only.
+    and HardMatch reference evaluators.
     """
     if F is None or len(kpts0) == 0:
         return np.full((len(kpts0),), np.inf, dtype=np.float64)
@@ -505,7 +485,8 @@ def _epi_distance_hz(F, kpts0, kpts1):
     Fx0 = h0 @ F.T
     Ftx1 = h1 @ F
     r2 = (h1 * Fx0).sum(axis=1) ** 2
-    inv = 1.0 / np.maximum(Fx0[:, 0] ** 2 + Fx0[:, 1] ** 2, _EPS)         + 1.0 / np.maximum(Ftx1[:, 0] ** 2 + Ftx1[:, 1] ** 2, _EPS)
+    inv = (1.0 / np.maximum(Fx0[:, 0] ** 2 + Fx0[:, 1] ** 2, _EPS)
+           + 1.0 / np.maximum(Ftx1[:, 0] ** 2 + Ftx1[:, 1] ** 2, _EPS))
     return np.sqrt(r2 * inv + 1e-8)
 
 
@@ -583,7 +564,7 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
         if F_pred is None or F_pred.shape != (3, 3):
             F_pred = DEGENERATE_F
 
-        errs = _epi_distance_hz(F_pred, gt[:, :2], gt[:, 2:4])
+        errs = _epi_distance(F_pred, gt[:, :2], gt[:, 2:4])
         pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
         _append_by_subset(pck_by_subset, subset, pck)
 
@@ -607,221 +588,5 @@ def eval_correspondence_pairs(matcher, pairs, resize_long: int | None = None,
     out["mean_inliers"] = _safe_mean(inlier_counts)
     out["mean_kpts0"] = _safe_mean(n_kpts0)
     out["mean_kpts1"] = _safe_mean(n_kpts1)
-    out["resize_long"] = resize_long
-    return out
-
-
-def eval_fundamental_pairs(matcher, pairs, resize_long: int | None = None,
-                           thresholds=(1, 3, 5, 10), progress: bool = True):
-    """`pairs` yields {im_A_path, im_B_path, F_gt}. WxBS-style fundamental eval.
-
-    Uses the GT fundamental matrix F_gt directly to score the matcher's
-    predicted matches: for each match (x0, x1), compute symmetric epipolar
-    distance to F_gt; report per-pair PCK at thresholds + mAA aggregation.
-    """
-    pck_by_subset: dict[str, list] = {}
-    timings, match_counts, n_kpts0, n_kpts1 = [], [], [], []
-    n_pair_failures = 0
-
-    for pair in tqdm(pairs, desc="pairs", disable=not progress):
-        im_A_path = Path(pair["im_A_path"])
-        im_B_path = Path(pair["im_B_path"])
-        F_gt = np.asarray(pair["F_gt"], dtype=np.float64)
-        subset = str(pair.get("subset") or pair.get("scene") or "all")
-
-        try:
-            (img0, img1, _, _, _, _,
-             (sx0, sy0), (sx1, sy1)) = _prepare_pair_images(
-                matcher, im_A_path, im_B_path, resize_long=resize_long,
-            )
-            t0 = time.time()
-            result = matcher(img0, img1)
-            timings.append(time.time() - t0)
-        except Exception as e:  # noqa: BLE001
-            n_pair_failures += 1
-            _warn_pair_failure("eval_fundamental_pairs", im_A_path, im_B_path, e, n_pair_failures)
-            zero_pck = np.zeros(len(thresholds), dtype=np.float64)
-            _append_by_subset(pck_by_subset, subset, zero_pck)
-            match_counts.append(0)
-            n_kpts0.append(0)
-            n_kpts1.append(0)
-            continue
-
-        kpts0 = np.asarray(result["matched_kpts0"], dtype=np.float64).copy()
-        kpts1 = np.asarray(result["matched_kpts1"], dtype=np.float64).copy()
-        match_counts.append(len(kpts0))
-        n_kpts0.append(len(result.get("all_kpts0", np.empty((0, 2)))))
-        n_kpts1.append(len(result.get("all_kpts1", np.empty((0, 2)))))
-
-        # Bring matches back to ORIGINAL image frame so they're comparable to F_gt
-        # (which is defined in the original image coordinates).
-        if resize_long is not None and len(kpts0):
-            kpts0[:, 0] /= sx0
-            kpts0[:, 1] /= sy0
-            kpts1[:, 0] /= sx1
-            kpts1[:, 1] /= sy1
-
-        ths_arr = np.asarray(thresholds, dtype=np.float64)
-        if len(kpts0) == 0:
-            pck = np.zeros(len(thresholds), dtype=np.float64)
-        else:
-            errs = _epi_distance(F_gt, kpts0, kpts1)
-            pck = (errs[:, None] <= ths_arr[None, :]).mean(axis=0)
-        _append_by_subset(pck_by_subset, subset, pck)
-
-    _warn_summary("eval_fundamental_pairs", len(match_counts), n_pair_failures,
-                  "PCK=0 for those.")
-
-    out: dict = {"num_pair_failures": n_pair_failures}
-    for subset, vecs in pck_by_subset.items():
-        if not vecs:
-            continue
-        avg = np.stack(vecs, axis=0).mean(axis=0)
-        for t, val in zip(thresholds, avg):
-            out[f"{subset}_pck_{int(t)}"] = float(val)
-        # mAA = trapezoidal area under PCK(threshold) curve up to max threshold.
-        out[f"{subset}_mAA"] = float(np.trapezoid(avg, x=np.asarray(thresholds, dtype=np.float64))
-                                      / float(thresholds[-1]))
-        out[f"{subset}_num_pairs"] = len(vecs)
-    out["mean_time_s"] = float(np.mean(timings)) if timings else 0.0
-    out["mean_matches"] = float(np.mean(match_counts)) if match_counts else 0.0
-    out["mean_kpts0"] = float(np.mean(n_kpts0)) if n_kpts0 else 0.0
-    out["mean_kpts1"] = float(np.mean(n_kpts1)) if n_kpts1 else 0.0
-    out["resize_long"] = resize_long
-    return out
-
-
-def _resolve_cv_feature(matcher):
-    """Return the matcher's cv2 feature object via the public protocol, falling
-    back to legacy private-attr sniffing for matchers that pre-date `get_cv_feature`.
-    """
-    getter = getattr(matcher, "get_cv_feature", None)
-    if callable(getter):
-        f = getter()
-        if f is not None and hasattr(f, "compute"):
-            return f
-    # Legacy fallback — kept so external matcher subclasses don't break.
-    for attr in ("_sift", "_rootsift", "_orb", "_akaze", "_brisk", "_kaze"):
-        f = getattr(matcher, attr, None)
-        if f is not None and hasattr(f, "compute"):
-            return f
-    return None
-
-
-def _matcher_describe(matcher, raw_u8: np.ndarray, kpts_xy: np.ndarray,
-                      kpt_sizes: np.ndarray | None = None):
-    """Extract descriptors at fixed kpts via the matcher's cv2 feature object.
-
-    Returns (desc, metric) where metric is 'l2' or 'hamming', or None if the
-    matcher doesn't expose a cv2 feature (caller treats as 'skipped').
-    RootSIFT-style L1-normalize + sqrt is applied when the matcher's class name
-    contains 'Root'.
-    """
-    sizes = kpt_sizes if kpt_sizes is not None else \
-            np.full(len(kpts_xy), DEFAULT_KPT_SIZE_PX, dtype=np.float32)
-    feat_obj = _resolve_cv_feature(matcher)
-    if feat_obj is None:
-        return None
-    gray = raw_u8 if raw_u8.ndim == 2 else cv2.cvtColor(raw_u8, cv2.COLOR_RGB2GRAY)
-    cv_kpts = [cv2.KeyPoint(float(x), float(y), float(s))
-               for (x, y), s in zip(kpts_xy, sizes)]
-    try:
-        _kp_out, desc = feat_obj.compute(gray, cv_kpts)
-    except cv2.error:
-        return None
-    if desc is None or len(desc) == 0:
-        return None
-    if "Root" in type(matcher).__name__ and desc.dtype != np.uint8:
-        d32 = desc.astype(np.float32)
-        d32 = d32 / np.maximum(d32.sum(axis=1, keepdims=True), _EPS)
-        desc = np.sqrt(d32)
-    metric = "hamming" if desc.dtype == np.uint8 else "l2"
-    return (desc, metric)
-
-
-def _compute_map_topk(d_a: np.ndarray, d_b: np.ndarray, metric: str = "l2") -> dict:
-    if len(d_a) == 0 or len(d_b) == 0 or len(d_a) != len(d_b):
-        return {"top1_acc": 0.0, "top5_acc": 0.0, "mAP": 0.0, "n": 0}
-    if metric == "hamming":
-        a = d_a.astype(np.uint8)
-        b = d_b.astype(np.uint8)
-        bits = np.unpackbits(a[:, None, :] ^ b[None, :, :], axis=-1).sum(axis=-1)
-        D = bits
-    else:
-        a2 = (d_a ** 2).sum(axis=1, keepdims=True)
-        b2 = (d_b ** 2).sum(axis=1, keepdims=True).T
-        D = a2 + b2 - 2.0 * d_a @ d_b.T
-    order = np.argsort(D, axis=1)
-    n = len(d_a)
-    ranks = np.empty(n, dtype=np.int64)
-    for i in range(n):
-        ranks[i] = int(np.where(order[i] == i)[0][0])
-    return {
-        "top1_acc": float((ranks == 0).mean()),
-        "top5_acc": float((ranks < 5).mean()),
-        "mAP": float((1.0 / (ranks + 1)).mean()),
-        "n": n,
-    }
-
-
-def eval_descriptor_pairs(matcher, pairs, resize_long: int | None = None,
-                          progress: bool = True):
-    """`pairs` yields {im_A_path, im_B_path, kpts_A, kpts_B, kpt_sizes_A, subset}.
-    Pure descriptor isolation: extract at fixed kpts, rank by distance.
-    Only supports cv2-feature CustomFeatureMatcher subclasses; other matchers report `skipped`.
-    """
-    timings = []
-    metrics_by_subset: dict[str, list] = {}
-    skipped = False
-    n_seen = 0
-
-    for pair in tqdm(pairs, desc="pairs", disable=not progress):
-        n_seen += 1
-        im_A_path = Path(pair["im_A_path"])
-        im_B_path = Path(pair["im_B_path"])
-        kpts_A = np.asarray(pair["kpts_A"], dtype=np.float32)
-        kpts_B = np.asarray(pair["kpts_B"], dtype=np.float32)
-        sizes_A = np.asarray(pair.get("kpt_sizes_A",
-                                       np.full(len(kpts_A), DEFAULT_KPT_SIZE_PX, dtype=np.float32)),
-                              dtype=np.float32)
-        sizes_B = np.asarray(pair.get("kpt_sizes_B",
-                                       np.full(len(kpts_B), DEFAULT_KPT_SIZE_PX, dtype=np.float32)),
-                              dtype=np.float32)
-        subset = str(pair.get("subset") or "all")
-
-        rawA = imread(str(im_A_path), cv2.IMREAD_COLOR)
-        rawB = imread(str(im_B_path), cv2.IMREAD_COLOR)
-        if rawA is None or rawB is None or len(kpts_A) == 0:
-            continue
-        rawA = cv2.cvtColor(rawA, cv2.COLOR_BGR2RGB)
-        rawB = cv2.cvtColor(rawB, cv2.COLOR_BGR2RGB)
-
-        t0 = time.time()
-        rA = _matcher_describe(matcher, rawA, kpts_A, sizes_A)
-        rB = _matcher_describe(matcher, rawB, kpts_B, sizes_B)
-        timings.append(time.time() - t0)
-        if rA is None or rB is None:
-            skipped = True
-            break
-        d_a, metric = rA
-        d_b, _ = rB
-        n = min(len(d_a), len(d_b))
-        if n < 8:
-            continue
-        m = _compute_map_topk(d_a[:n], d_b[:n], metric=metric)
-        _append_by_subset(metrics_by_subset, subset, m)
-
-    if n_seen == 0:
-        raise EmptyPairsError("eval_descriptor_pairs: dataset yielded zero pairs; check the data root and layout.")
-    out: dict = {"skipped": skipped}
-    for subset, results in metrics_by_subset.items():
-        if not results:
-            continue
-        out[f"{subset}_top1"] = float(np.mean([r["top1_acc"] for r in results]))
-        out[f"{subset}_top5"] = float(np.mean([r["top5_acc"] for r in results]))
-        out[f"{subset}_mAP"] = float(np.mean([r["mAP"] for r in results]))
-        out[f"{subset}_n_pairs"] = len(results)
-        out[f"{subset}_n_kpts"] = int(np.sum([r["n"] for r in results]))
-    out["mean_time_s"] = _safe_mean(timings)
     out["resize_long"] = resize_long
     return out

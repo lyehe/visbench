@@ -100,7 +100,7 @@ long paths are enabled.
 ```bash
 uv pip install -e .[dev]
 python -m pytest            # tests/ only (pyproject testpaths)
-ruff check visbench tests scripts
+ruff check visbench tests
 ```
 
 Real-data tests are opt-in: `VISBENCH_SMOKE=1 VISBENCH_DATA_ROOT=<root>` runs a

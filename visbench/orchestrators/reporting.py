@@ -20,9 +20,6 @@ TASK_METRICS: dict[str, list[tuple[str, str]]] = {
     "homography": [("all_auc_3", "AUC@3px"), ("all_auc_5", "AUC@5px"), ("all_auc_10", "AUC@10px")],
     "homography_points": [("auc_10px", "AUC@10px"), ("auc_5px", "AUC@5px"), ("auc_20px", "AUC@20px")],
     "correspondence": [("all_mAA_10", "mAA@10px"), ("all_mAA_5", "mAA@5px"), ("all_pck_10", "PCK@10px")],
-    "fundamental": [("all_mAA", "mAA"), ("all_pck_3", "PCK@3px"), ("all_pck_10", "PCK@10px")],
-    "descriptor": [("all_mAP", "mAP"), ("all_top1", "top1"), ("all_top5", "top5")],
-    "qualitative": [("mean_matches", "matches"), ("mean_inliers", "inliers"), ("mean_time_s", "time s")],
 }
 
 
@@ -104,15 +101,10 @@ def dataset_task(ds: str, sample_metrics: dict | None = None) -> str:
         return get_dataset_spec(ds).task
     except Exception:  # noqa: BLE001
         keys = set(sample_metrics or {})
-        if "auc_5" in keys:
-            return "pose"
-        if "all_auc_3" in keys:
-            return "homography"
-        if "all_mAA_10" in keys:
-            return "correspondence"
-        if "all_mAA" in keys:
-            return "fundamental"
-        return "qualitative"
+        for task, cols in TASK_METRICS.items():
+            if cols[0][0] in keys:
+                return task
+        return "pose"
 
 
 def _value(metrics: dict, key: str):
@@ -177,7 +169,7 @@ def report(results_dir: Path, top_k: int = 25,
         sample = next((dsmap[ds] for dsmap in rows.values() if ds in dsmap), None)
         task = dataset_task(ds, sample)
         tasks[ds] = task
-        cols = TASK_METRICS.get(task, TASK_METRICS["qualitative"])
+        cols = TASK_METRICS[task]
         ranked = []
         for name, dsmap in rows.items():
             if ds in dsmap:
@@ -210,7 +202,7 @@ def report(results_dir: Path, top_k: int = 25,
     for name, dsmap in rows.items():
         cells = []
         for ds in panel:
-            key = TASK_METRICS.get(tasks[ds], TASK_METRICS["qualitative"])[0][0]
+            key = TASK_METRICS[tasks[ds]][0][0]
             cells.append(_value(dsmap[ds], key) if ds in dsmap else None)
         scores = [v for v in cells if v is not None]
         if scores and len(scores) >= max(1, len(panel) // 2):
@@ -233,7 +225,7 @@ def report(results_dir: Path, top_k: int = 25,
     for name in methods:
         payload["matrix"][name] = {}
     for ds in panel:
-        key = matrix_metric or TASK_METRICS.get(tasks[ds], TASK_METRICS["qualitative"])[0][0]
+        key = matrix_metric or TASK_METRICS[tasks[ds]][0][0]
         vals = []
         for name in methods:
             v = _value(rows[name][ds], key) if ds in rows[name] else None

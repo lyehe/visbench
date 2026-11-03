@@ -1,15 +1,6 @@
 """Shared primitives for synthetic-perturbation HPatches datasets.
 
-Previously these lived in `synthetic.py` and `synthetic_advanced.py` with a
-leading underscore, and sibling modules (`synthetic_compound`,
-`synthetic_geometric`, `synthetic_advanced`) reached into those private names.
-That coupled the chain — renaming any private helper silently broke 2-3
-modules downstream. Centralising them here makes the cross-module dependency
-explicit and one-way (everyone imports from `_synthetic_common`; nothing in
-`_synthetic_common` imports from a sibling).
-
-The names here intentionally have no leading underscore: they are part of the
-synthetic-datasets package's internal-shared API, not module-private.
+Every synthetic module imports from here; nothing here imports from a sibling.
 """
 
 from __future__ import annotations

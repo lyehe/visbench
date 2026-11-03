@@ -80,27 +80,7 @@ def _perspective(strength: float, seed: int = 0):
     return make
 
 
-def _random_affine(seed: int = 0):
-    def make(w, h):
-        rng = _stable_rng(seed, w, h)
-        theta = rng.uniform(-30, 30) * np.pi / 180.0
-        s = rng.uniform(0.8, 1.3)
-        sh = rng.uniform(-0.15, 0.15)
-        R = np.array([[np.cos(theta) * s, -np.sin(theta) * s + sh, 0.0],
-                      [np.sin(theta) * s, np.cos(theta) * s, 0.0],
-                      [0.0, 0.0, 1.0]])
-        cx, cy = w / 2.0, h / 2.0
-        T1 = np.array([[1.0, 0.0, -cx], [0.0, 1.0, -cy], [0.0, 0.0, 1.0]])
-        corners = np.array([[0, 0, 1], [w, 0, 1], [w, h, 1], [0, h, 1]], dtype=np.float64).T
-        wc = R @ T1 @ corners
-        xs, ys = wc[0], wc[1]
-        tx, ty = -min(0.0, float(xs.min())), -min(0.0, float(ys.min()))
-        T2 = np.array([[1.0, 0.0, tx], [0.0, 1.0, ty], [0.0, 0.0, 1.0]])
-        H = T2 @ R @ T1
-        nw = int(np.ceil(float(xs.max()) + tx))
-        nh = int(np.ceil(float(ys.max()) + ty))
-        return H, (nw, nh)
-    return make
+
 
 
 _BASE_KW = dict(

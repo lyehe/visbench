@@ -107,7 +107,6 @@ def _record_intents_for(name: str) -> tuple[list[dict], str | None]:
 
     saved = {}
     for n, fn in (("download_url", fake_url), ("download_hf", fake_hf),
-                  ("download_gdown", fake_gdown),
                   ("download_gdown_bypass", fake_gdown),
                   ("extract_archive", fake_extract)):
         saved[n] = getattr(dl, n)
@@ -119,7 +118,6 @@ def _record_intents_for(name: str) -> tuple[list[dict], str | None]:
         if not modname.startswith("visbench.datasets."):
             continue
         for n, fn in (("download_url", fake_url), ("download_hf", fake_hf),
-                      ("download_gdown", fake_gdown),
                       ("download_gdown_bypass", fake_gdown),
                       ("extract_archive", fake_extract)):
             if hasattr(mod, n):

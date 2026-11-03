@@ -83,12 +83,6 @@ class CustomFeatureMatcher(BaseMatcher):
     """Subclass and override `detect_and_describe`.
 
     Returns (kpts: (N,2) float xy, desc: (N,D) float or (N,D8) uint8 packed).
-
-    Subclasses backed by a cv2 feature object (SIFT, ORB, ...) can additionally
-    override `get_cv_feature()` so the descriptor-isolation eval can extract
-    descriptors at user-supplied keypoint locations without reaching into
-    private attributes. Returning None signals the matcher cannot describe at
-    fixed keypoints; the descriptor eval will then report `skipped`.
     """
 
     descriptor_metric: str = "l2"
@@ -99,13 +93,6 @@ class CustomFeatureMatcher(BaseMatcher):
 
     def detect_and_describe(self, img_u8: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         raise NotImplementedError
-
-    def get_cv_feature(self):
-        """Return an OpenCV feature object with `.compute(gray, keypoints)`, or None.
-
-        Used by the descriptor-isolation eval. Default: None (skips).
-        """
-        return None
 
     def _forward(self, img0: torch.Tensor, img1: torch.Tensor):
         u0 = _to_numpy_uint8(img0)

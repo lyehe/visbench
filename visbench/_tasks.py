@@ -19,7 +19,4 @@ TASKS: frozenset[str] = frozenset({
     "homography",
     "homography_points",
     "correspondence",
-    "descriptor",
-    "fundamental",
-    "qualitative",
 })

@@ -82,26 +82,9 @@ def download_hf(repo_id: str, dest: str | Path, repo_type: str = "dataset",
     return dest
 
 
-def download_gdown(file_id: str, dest: str | Path, fuzzy: bool = True) -> Path:
-    """Primary path: standard gdown."""
-    import gdown
-
-    dest = Path(dest)
-    _ensure_dir(dest.parent)
-    if dest.exists():
-        return dest
-    url = f"https://drive.google.com/uc?id={file_id}"
-    out = gdown.download(url, str(dest), fuzzy=fuzzy, quiet=False)
-    if out is None:
-        raise RuntimeError(f"gdown failed for file_id={file_id} (try download_gdown_bypass)")
-    return Path(out)
-
-
 def download_gdown_bypass(file_id: str, dest: str | Path) -> Path:
-    """Fallback: curl `drive.usercontent.google.com` to dodge quota / virus-scan interstitial.
-
-    This is the trick used in featurexx for DSEC after gdown started failing on quota.
-    """
+    """Google Drive download via curl on `drive.usercontent.google.com`, which skips
+    the quota / virus-scan interstitial that breaks gdown."""
     dest = Path(dest)
     _ensure_dir(dest.parent)
     if dest.exists():
@@ -114,7 +97,7 @@ def download_gdown_bypass(file_id: str, dest: str | Path) -> Path:
 
 def extract_archive(path: str | Path, dest: str | Path | None = None,
                     strip_components: int = 0) -> Path:
-    """Extract `.tar` / `.tar.gz` / `.tgz` / `.zip` / `.7z`. Returns destination dir."""
+    """Extract `.tar` / `.tar.gz` / `.tgz` / `.tar.bz2` / `.zip`. Returns destination dir."""
     path = Path(path)
     dest = _ensure_dir(Path(dest) if dest else path.parent)
     name = path.name.lower()
@@ -135,26 +118,9 @@ def extract_archive(path: str | Path, dest: str | Path | None = None,
     elif name.endswith(".zip"):
         with zipfile.ZipFile(path) as zf:
             zf.extractall(dest)
-    elif name.endswith(".7z"):
-        try:
-            import py7zr
-            with py7zr.SevenZipFile(path) as sz:
-                sz.extractall(dest)
-        except ImportError as e:
-            raise ImportError("py7zr required for .7z archives; pip install py7zr") from e
     else:
         raise ValueError(f"Unsupported archive: {path}")
     return dest
-
-
-def is_prepared(marker: Path) -> bool:
-    """Lightweight idempotency check — used by dataset.download() to skip rework."""
-    return marker.exists()
-
-
-def write_marker(marker: Path, content: str = "ok") -> None:
-    _ensure_dir(marker.parent)
-    marker.write_text(content)
 
 
 def copytree_into(src: Path, dst: Path) -> None:

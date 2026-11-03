@@ -1,12 +1,4 @@
-"""Shared protocol constants used by both the metric primitives and the
-harness.
-
-Before this module existed, the same minima (`5` for the 5-point essential,
-`4` for the 4-point homography) and the same RANSAC confidence (`0.99999`)
-lived in two places — `core/metrics/{pose,homography}.py` literals AND
-`core/harness.py` named constants — so a protocol change risked silently
-desyncing the two locations.
-"""
+"""Protocol constants shared by the metric primitives and the harness (one source of truth)."""
 
 from __future__ import annotations
 

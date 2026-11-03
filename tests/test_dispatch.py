@@ -7,19 +7,16 @@ returns a JSON-serializable dict with non-zero keys.
 
 from __future__ import annotations
 
-import json
 
 import numpy as np
 import pytest
 
 from visbench.core.harness import (
     eval_correspondence_pairs,
-    eval_descriptor_pairs,
-    eval_fundamental_pairs,
     eval_homography_pairs,
+    eval_point_homography_pairs,
     eval_pose_pairs,
 )
-from visbench.orchestrators.run import _evaluate, _qualitative_sweep
 
 
 class StubMatcher:
@@ -55,44 +52,9 @@ def _identical_pair():
         "K0": np.eye(3), "K1": np.eye(3),
         "R_0to1": np.eye(3), "t_0to1": np.array([1.0, 0, 0]),
         "H_gt": np.eye(3),
-        "F_gt": np.eye(3),
         "corrs": np.zeros((4, 4)),
-        "kpts_A": np.array([[10.0, 10.0]] * 16, dtype=np.float32),
-        "kpts_B": np.array([[10.0, 10.0]] * 16, dtype=np.float32),
         "subset": "test", "scene": "test",
     }]
-
-
-def _identical_pair_with_real_image(tmp_path):
-    """Like _identical_pair() but writes an actual image file so PIL.Image.open
-    succeeds — needed since _qualitative_sweep now goes through the same
-    aspect-preserving resize as the other eval_* paths."""
-    from PIL import Image
-    p = tmp_path / "stub.png"
-    Image.new("RGB", (32, 32)).save(p)
-    pair = dict(_identical_pair()[0])
-    pair["im_A_path"] = str(p)
-    pair["im_B_path"] = str(p)
-    return [pair]
-
-
-def test_dispatch_unknown_task_falls_back_to_qualitative(tmp_path):
-    """An unrecognised task degrades gracefully to a qualitative sweep."""
-    matcher = StubMatcher()
-    res = _evaluate("not_a_real_task", matcher,
-                    _identical_pair_with_real_image(tmp_path),
-                    resize_long=64, ransac_runs=1, progress=False, seed=0)
-    for k in ("mean_time_s", "mean_matches", "num_pairs"):
-        assert k in res
-    json.dumps(res)  # must be JSON-serialisable
-
-
-def test_qualitative_returns_serializable_dict(tmp_path):
-    matcher = StubMatcher()
-    res = _qualitative_sweep(matcher, _identical_pair_with_real_image(tmp_path),
-                             resize_long=32)
-    json.dumps(res)
-    assert res["num_pairs"] == 1
 
 
 def test_dispatch_forwards_only_accepted_kwargs(tmp_path):
@@ -109,31 +71,11 @@ def test_dispatch_forwards_only_accepted_kwargs(tmp_path):
     assert "ransac_runs" not in homog_kw
 
 
-def test_qualitative_warns_on_pair_failure(tmp_path):
-    """Regression: _qualitative_sweep used to silently swallow per-pair
-    exceptions; now it emits the same UserWarning the eval_*_pairs paths do."""
-    import warnings
-
-    class CrashingMatcher(StubMatcher):
-        def __call__(self, img0, img1):
-            raise RuntimeError("simulated matcher crash")
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        res = _qualitative_sweep(CrashingMatcher(),
-                                 _identical_pair_with_real_image(tmp_path),
-                                 resize_long=32)
-    assert res["num_pair_failures"] == 1
-    assert any("_qualitative_sweep" in str(w.message) for w in caught), \
-        f"expected per-pair warning, got: {[str(w.message) for w in caught]}"
-
-
 @pytest.mark.parametrize("eval_fn", [
     eval_pose_pairs,
     eval_homography_pairs,
     eval_correspondence_pairs,
-    eval_descriptor_pairs,
-    eval_fundamental_pairs,
+    eval_point_homography_pairs,
 ])
 def test_each_eval_rejects_empty_iter(eval_fn):
     """Zero pairs means missing data or a bad layout, never a score of 0."""
@@ -143,8 +85,7 @@ def test_each_eval_rejects_empty_iter(eval_fn):
 
 
 def test_every_registered_dataset_has_a_dispatcher_path():
-    """Sanity: every dataset's task is one the dispatcher knows about
-    OR will fall through to the qualitative fallback."""
+    """Every dataset's task has an eval in the dispatcher."""
     from visbench.datasets import available, get
     from visbench._tasks import TASKS
     known = set(TASKS)
@@ -153,6 +94,4 @@ def test_every_registered_dataset_has_a_dispatcher_path():
         spec = get(n)
         if spec.task not in known:
             unknown_tasks.add(spec.task)
-    # Even if some are unknown, the fallback handles them — but flag here so
-    # we notice if a new task type slips in without a metric implementation.
     assert not unknown_tasks, f"unrecognised tasks: {unknown_tasks}"

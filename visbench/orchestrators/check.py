@@ -5,7 +5,7 @@
   and do clearly better than under a 5-8 deg perturbed pose (see core/gt_check.py).
 - correspondence / homography_points: images must load and every annotated point
   must lie inside its image.
-- homography / descriptor: images must load and the GT must be finite.
+- homography: images must load and the GT must be finite.
 
 Returns True when the dataset passes. Nothing is written except rotated-image caches
 that the loader itself creates.

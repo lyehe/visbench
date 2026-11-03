@@ -70,7 +70,6 @@ def patched_download(monkeypatch_module):
 
     monkeypatch_module.setattr(dl, "download_url", fake_url)
     monkeypatch_module.setattr(dl, "download_hf", fake_hf)
-    monkeypatch_module.setattr(dl, "download_gdown", fake_gdown)
     monkeypatch_module.setattr(dl, "download_gdown_bypass", fake_gdown)
     monkeypatch_module.setattr(dl, "extract_archive", fake_extract)
 
@@ -78,7 +77,7 @@ def patched_download(monkeypatch_module):
     for modname, mod in list(sys.modules.items()):
         if not modname.startswith("visbench.datasets."):
             continue
-        for n in ("download_url", "download_hf", "download_gdown",
+        for n in ("download_url", "download_hf",
                   "download_gdown_bypass", "extract_archive"):
             if hasattr(mod, n):
                 monkeypatch_module.setattr(mod, n, getattr(dl, n))

@@ -34,8 +34,6 @@ dependencies = [
   # Dataset downloads / formats.
   "huggingface_hub>=0.22.0",
   "hf_transfer>=0.1.5",
-  "gdown>=5.1.0",
-  "py7zr",
   "pyarrow",
 ]
 

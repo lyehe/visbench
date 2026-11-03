@@ -14,8 +14,6 @@ from pathlib import Path
 
 from ..core.harness import (
     eval_correspondence_pairs,
-    eval_descriptor_pairs,
-    eval_fundamental_pairs,
     eval_homography_pairs,
     eval_point_homography_pairs,
     eval_pose_pairs,
@@ -63,49 +61,6 @@ def build_matcher(method: str, device: str):
     return get_method_spec(method).builder(device)
 
 
-def _qualitative_sweep(matcher, pairs, resize_long=None, progress: bool = True):
-    """Cross-matcher speed/match-count sweep used as the fallback when a
-    dataset's task isn't in `_TASK_DISPATCH`. Shares the same image cache,
-    aspect-preserving long-side resize, progress and per-pair-failure
-    warning conventions as the other eval_* paths (matters: vismatch's
-    load_image treats a bare int as a SQUARE resize, which would distort
-    non-square inputs).
-    """
-    import numpy as np
-    from pathlib import Path
-    from tqdm import tqdm
-    from ..core.harness import _prepare_pair_images, _warn_pair_failure, _warn_summary
-    times, matches, inliers = [], [], []
-    n_failures = 0
-    for pair in tqdm(pairs, desc="pairs", disable=not progress):
-        try:
-            img0, img1, *_ = _prepare_pair_images(
-                matcher, pair["im_A_path"], pair["im_B_path"],
-                resize_long=resize_long,
-            )
-            t = time.time()
-            r = matcher(img0, img1)
-            times.append(time.time() - t)
-            matches.append(len(r.get("matched_kpts0", [])))
-            inliers.append(int(r.get("num_inliers", 0)))
-        except Exception as e:  # noqa: BLE001
-            n_failures += 1
-            _warn_pair_failure("_qualitative_sweep",
-                               Path(pair.get("im_A_path", "?")),
-                               Path(pair.get("im_B_path", "?")),
-                               e, n_failures)
-    _warn_summary("_qualitative_sweep", len(times) + n_failures, n_failures,
-                  "excluded from the qualitative aggregate.")
-    return {
-        "mean_time_s": float(np.mean(times)) if times else 0.0,
-        "mean_matches": float(np.mean(matches)) if matches else 0.0,
-        "mean_inliers": float(np.mean(inliers)) if inliers else 0.0,
-        "num_pairs": len(times),
-        "num_pair_failures": n_failures,
-        "resize_long": resize_long,
-    }
-
-
 # Each entry is the bare eval function for the task; `_evaluate` filters the
 # caller's kwargs against each function's signature so we don't have to repeat
 # the same lambda wrapper just to drop `seed`/`ransac_runs` for tasks that
@@ -115,9 +70,6 @@ _TASK_DISPATCH = {
     "homography": eval_homography_pairs,
     "homography_points": eval_point_homography_pairs,
     "correspondence": eval_correspondence_pairs,
-    "fundamental": eval_fundamental_pairs,
-    "descriptor": eval_descriptor_pairs,
-    "qualitative": _qualitative_sweep,
 }
 
 
@@ -160,16 +112,7 @@ _check_dispatch_matches_tasks()
 
 def _evaluate(spec_task: str, matcher, pairs, *, resize_long, ransac_runs,
               progress, seed: int | None = 0):
-    fn = _TASK_DISPATCH.get(spec_task)
-    if fn is None:
-        # Unknown / future task — degrade gracefully to a qualitative sweep so
-        # any new dataset still produces SOMETHING comparable across matchers.
-        import warnings
-        warnings.warn(f"Unknown task '{spec_task}' — falling back to qualitative sweep "
-                      f"(speed + match-count only). Add a dispatch entry to "
-                      f"orchestrators/run._TASK_DISPATCH to get full metrics.",
-                      stacklevel=2)
-        fn = _qualitative_sweep
+    fn = _TASK_DISPATCH[spec_task]  # register() only accepts tasks in visbench._tasks.TASKS
     candidate_kwargs = {
         "resize_long": resize_long,
         "ransac_runs": ransac_runs,
@@ -197,10 +140,7 @@ def run_one(dataset: str, method: str, *, data_root_override: Path | None = None
         )
 
     matcher = build_matcher(method, device=device)
-    # Forward spec.kwargs (e.g. hardmatch vs hardmatch_rot90 differ only by
-    # the kwargs they hand iter_pairs).
-    # Production used to drop these, silently making `_wide`/`_hard` variants
-    # identical to their base.
+    # spec.kwargs is how variants differ (e.g. hardmatch vs hardmatch_rot90).
     pairs = iter_dataset_pairs(spec, data_root, max_pairs, seed)
     resize_long = resize if resize is not None else spec.default_resize
 
