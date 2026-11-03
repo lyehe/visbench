@@ -50,3 +50,15 @@ def test_check_flags_out_of_image_annotations(tmp_path, monkeypatch, capsys):
         assert "2 with problems" in capsys.readouterr().out
     finally:
         _REGISTRY.pop("__check_corr", None)
+
+
+def test_report_merges_git_bash_and_native_bundle_paths(tmp_path):
+    import json
+
+    from visbench.orchestrators.reporting import _load_results
+
+    for ds, m in (("hardmatch", "romaxx:flexglue-trt:/c/b/core"), ("satast", "romaxx:flexglue-trt:C:/b/core/")):
+        (tmp_path / f"{ds}.json").write_text(json.dumps({"dataset": ds, "method": m, "metrics": {"x": 1}}))
+    rows = _load_results(tmp_path)
+    assert list(rows) == ["romaxx:flexglue-trt:C:/b/core"]
+    assert sorted(rows["romaxx:flexglue-trt:C:/b/core"]) == ["hardmatch", "satast"]

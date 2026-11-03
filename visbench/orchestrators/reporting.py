@@ -26,6 +26,22 @@ TASK_METRICS: dict[str, list[tuple[str, str]]] = {
 }
 
 
+def _canonical_method(name: str) -> str:
+    """One key per method: `romaxx:kind:/c/dir\\x` and `romaxx:kind:C:/dir/x` are the
+    same bundle written from Git Bash vs a native path, so results must merge."""
+    if not name.startswith("romaxx:"):
+        return name
+    kind, sep, arg = name.split(":", 1)[1].partition(":")
+    if not sep:
+        return name
+    arg = arg.replace("\\", "/").rstrip("/")
+    if len(arg) > 2 and arg[0] == "/" and arg[2] == "/" and arg[1].isalpha():
+        arg = f"{arg[1]}:{arg[2:]}"
+    if len(arg) > 1 and arg[1] == ":":
+        arg = arg[0].upper() + arg[1:]
+    return f"romaxx:{kind}:{arg}"
+
+
 def _load_results(results_dir: Path):
     """Read every per-cell JSON in results_dir; skip files that aren't a
     valid record (corrupted JSON, missing method/dataset, wrong shape).
@@ -43,7 +59,7 @@ def _load_results(results_dir: Path):
             continue
         if not isinstance(r, dict):
             continue
-        name = (r.get("method") or r.get("matcher") or "").replace("custom:", "")
+        name = _canonical_method((r.get("method") or r.get("matcher") or "").replace("custom:", ""))
         ds = r.get("dataset", "")
         if not name and not ds:
             continue
