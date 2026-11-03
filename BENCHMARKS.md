@@ -48,7 +48,9 @@ RoMa v2 reference (`romav2/benchmarks/satast.py`): homography fitted to the
 matches in normalized coordinates (`USAC_DEFAULT`, 0.001, confidence
 0.99999999, 100k iterations); every annotated point of A is mapped into B and
 the reprojection errors of all points are pooled; a failed fit counts each of
-its points as infinite error; AUC@5/10/20/30 px, headline AUC@10px.
+its points as infinite error; AUC@5/10/20/30 px, headline AUC@10px. Images
+(up to 4928×3280) are fed at a 1024 px long side, since several matchers run out
+of memory or stall at full size; matches are scored in original pixels.
 
 ### Pair caps and result reuse
 
@@ -120,7 +122,7 @@ numbers (OpenCV SIFT via `--method sift`, CPU, 2026-11-01):
 | `hardmatch` mAA@10px | 60 | 0.132 | |
 | `wxbs` mAA@10px | 32 | 0.046 | published SIFT ≈ 0.05 |
 | `hpatches` AUC@3px | 116 | 0.547 | |
-| `satast` AUC@10px | 39 | 0.585 | see below |
+| `satast` AUC@10px | 39 | 0.602 | 1024 px long side; see below |
 
 On SatAst, a matcher that returns the annotations' own homography scores 0.870
 AUC@10px (the annotation-noise ceiling) and a random matcher 0. SIFT's high

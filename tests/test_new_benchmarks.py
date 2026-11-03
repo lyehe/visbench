@@ -140,6 +140,37 @@ def test_satast_loader_reads_annotations(tmp_path):
     assert p["pts_A"].tolist() == [[1, 2], [3, 4]] and p["scene"] == "X"
 
 
+def test_satast_feeds_resized_images_and_scores_in_original_pixels(tmp_path):
+    """Full-size SatAst images OOM some matchers; the default long side is 1024
+    and matches are rescaled to original pixels before the homography fit."""
+    from visbench.core import harness
+    from visbench.core.harness import eval_point_homography_pairs
+    from visbench.datasets import get
+
+    assert get("satast").default_resize == 1024
+    harness.reset_caches()
+    Image.new("RGB", (2048, 1024)).save(tmp_path / "a.png")
+    Image.new("RGB", (2048, 1024)).save(tmp_path / "b.png")
+    seen = []
+
+    class Stub:
+        @staticmethod
+        def load_image(path, resize=None):
+            seen.append(resize)
+            return np.zeros(1)
+
+        def __call__(self, a, b):  # identity in the resized 1024x512 frame
+            g = np.array([[x, y] for x in (10.0, 500.0, 1000.0) for y in (10.0, 250.0, 500.0)])
+            return {"matched_kpts0": g, "matched_kpts1": g}
+
+    pts = np.array([[100.0, 100.0], [1500.0, 800.0], [1900.0, 50.0]])
+    pair = {"im_A_path": str(tmp_path / "a.png"), "im_B_path": str(tmp_path / "b.png"),
+            "pts_A": pts, "pts_B": pts}
+    out = eval_point_homography_pairs(Stub(), [pair], resize_long=1024, progress=False)
+    assert seen == [(512, 1024), (512, 1024)]
+    assert out["auc_10px"] > 0.95
+
+
 # --- method adapters ----------------------------------------------------------
 
 def test_romaxx_adapter_dense(tmp_path):

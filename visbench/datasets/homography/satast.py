@@ -107,6 +107,11 @@ def iter_pairs(data_root: Path | str, max_pairs: int | None = None) -> Iterator[
 
 register("satast", DatasetSpec(
     task="homography_points", iter_pairs=iter_pairs, default_root=Path("satast"),
+    # The images are up to 4928x3280. At full size LoFTR runs out of GPU memory
+    # and tensor-fed LoMa needs ~2 min per pair with almost no matches, so feed
+    # matchers a 1024 px long side (as for WxBS). Matches are mapped back to
+    # original pixels before scoring; `consumes_paths` methods size their own inputs.
+    default_resize=1024,
     download=download, source_url=_REPO,
     license="Images per AIMS / EarthMatch; annotations per repository",
 ))
