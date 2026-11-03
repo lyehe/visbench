@@ -23,6 +23,9 @@ dependencies = [
   # Matchers come from vismatch, which declares its own model dependencies.
   "vismatch",
   "torch>=2.0",
+  # Listed explicitly so [tool.uv.sources] resolves the CUDA build: vismatch
+  # needs it (ALIKED's deformable convolution) and PyPI's wheel is CPU-only.
+  "torchvision>=0.15",
   "opencv-python>=4.5.4",
   "numpy",
   "scipy",
