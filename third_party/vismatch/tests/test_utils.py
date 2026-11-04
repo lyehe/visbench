@@ -40,3 +40,17 @@ def test_invalid_input_raises():
     """Verify that a nonexistent path raises ValueError or AssertionError."""
     with pytest.raises((ValueError, AssertionError)):
         get_image_pairs_paths([Path("/nonexistent/path")])
+
+
+@pytest.mark.parametrize("state", ["missing", "empty", "git-only"])
+def test_add_to_path_uninitialised_submodule(tmp_path, monkeypatch, state):
+    from vismatch import utils
+
+    monkeypatch.setattr(utils, "__file__", str(tmp_path / "vismatch" / "utils.py"))
+    repo = tmp_path / "vismatch" / "third_party" / "CLIDD"
+    if state != "missing":
+        repo.mkdir(parents=True)
+    if state == "git-only":
+        (repo / ".git").write_text("gitdir: unused\n")
+    with pytest.raises(ImportError, match="git submodule update --init vismatch/third_party/CLIDD"):
+        utils.add_to_path(repo)

@@ -326,7 +326,18 @@ def add_to_path(path: str | Path) -> None:
     """
     from vismatch.import_sandbox import ImportSandbox
 
-    path = str(Path(path).resolve())
+    path = Path(path).resolve()
+    third_party = Path(__file__).resolve().parent / "third_party"
+    if path.is_relative_to(third_party) and path != third_party:
+        repo_name = path.relative_to(third_party).parts[0]
+        repo = third_party / repo_name
+        if not repo.is_dir() or not any(entry.name != ".git" for entry in repo.iterdir()):
+            raise ImportError(
+                f"vismatch submodule {repo_name!r} is missing or empty at {repo}. "
+                f"From the vismatch checkout, run: git submodule update --init vismatch/third_party/{repo_name}. "
+                "See FORK.md for vendored checkout paths."
+            )
+    path = str(path)
     sandbox = ImportSandbox.active()
     if sandbox is not None:
         sandbox.add_path(path)

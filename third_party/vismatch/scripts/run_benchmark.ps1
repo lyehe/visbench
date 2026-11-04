@@ -18,3 +18,4 @@ $Python = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 Write-Host "HF_HOME=$($env:HF_HOME)"
 Write-Host "TORCH_HOME=$($env:TORCH_HOME)"
 & $Python (Join-Path $RepoRoot "vismatch_test.py") @args
+exit $LASTEXITCODE
