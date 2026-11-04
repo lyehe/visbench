@@ -1,0 +1,22 @@
+# OpsiClear fork: install once with `pre-commit install`.
+# These hooks only check, or apply ruff with upstream's own config (which upstream already passes),
+# so they never rewrite upstream files and keep `git merge upstream/main` conflict-free.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]  # weights belong on the HF Hub, not in git
+      - id: debug-statements
+      - id: detect-private-key
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.5
+    hooks:
+      - id: ruff-check
+        args: [--fix]
+      - id: ruff-format
