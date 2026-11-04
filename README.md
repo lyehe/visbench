@@ -132,17 +132,24 @@ data.
 
 `third_party/vismatch` is an OpsiClear fork of
 [gmberton/vismatch](https://github.com/gmberton/vismatch) (BSD-3-Clause, license kept in that
-directory), vendored as a squashed `git subtree`. Change it in two ways:
+directory), vendored as a squashed `git subtree`. All changes, including small
+fixes, happen in the fork's own checkout, which merges upstream with its
+`scripts/sync_upstream.py`. Import them into visbench only through:
 
-- **Small fixes:** edit it here and commit with visbench as usual.
-- **Fork work and new upstream matchers:** these happen in the fork's own checkout, which merges
-  upstream with its `scripts/sync_upstream.py`. Then pull the fork into visbench:
+```bash
+uv run python scripts/sync_vismatch.py --fork <path-or-url-of-fork> --branch main
+```
 
-  ```bash
-  uv run python scripts/sync_vismatch.py --fork <path-or-url-of-fork> --branch main
-  ```
+This runs `git subtree pull --squash` and regenerates the root `.gitmodules` entries for
+vismatch's model submodules (git only reads the top-level `.gitmodules`). Do not
+edit `third_party/vismatch` directly.
 
-  This runs `git subtree pull --squash` and regenerates the root `.gitmodules` entries for
-  vismatch's model submodules (git only reads the top-level `.gitmodules`).
+Run the read-only guard with `python scripts/sync_vismatch.py --check`; the test
+suite also runs it. It compares the committed vendor tree, index and working
+files (including non-ignored untracked files) with the latest squash identified
+by its `git-subtree-dir:` and `git-subtree-split:` trailers. It needs that commit
+in local history; shallow checkouts may need more history. Model submodule
+gitlink revisions are checked; their local working files and ignored caches are
+outside this guard.
 
 Never open pull requests or issues against the upstream gmberton/vismatch repository.

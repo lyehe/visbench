@@ -10,6 +10,7 @@ Usage (from the visbench root, with a clean working tree)::
 
     uv run python scripts/sync_vismatch.py --fork ../featurexx/third_party/vismatch   # pull + regenerate
     uv run python scripts/sync_vismatch.py --gitmodules-only                          # regenerate only
+    python scripts/sync_vismatch.py --check                                         # read-only guard
 
 Then initialise whichever model submodules you need, e.g.
 ``git submodule update --init third_party/vismatch/vismatch/third_party/LoMa``.
@@ -34,11 +35,55 @@ def git(*args: str) -> str:
     return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
 
 
-def vendored_submodules() -> list[tuple[str, str]]:
-    """(path relative to visbench root, url) for every submodule declared by the vendored vismatch."""
+def check() -> int:
+    """Compare committed, staged and working vendor files with the last subtree squash.
+
+    The split commit need not exist locally: a squash stores its source tree as
+    its own root tree. Model submodule contents are separate repositories; their
+    gitlink revisions are checked, but their local working files are ignored.
+    """
+    squash = git(
+        "log",
+        "-1",
+        "--format=%H",
+        "--all-match",
+        f"--grep=^git-subtree-dir: {PREFIX}/*$",
+        "--grep=^git-subtree-split: ",
+        "HEAD",
+    ).strip()
+    if not squash:
+        print("No vismatch subtree squash metadata found; fetch the complete subtree history.", file=sys.stderr)
+        return 1
+    source_tree = git("rev-parse", f"{squash}^{{tree}}").strip()
+    vendor_tree = git("rev-parse", f"HEAD:{PREFIX}").strip()
+    changed = source_tree != vendor_tree
+    staged = git("diff", "--cached", "--name-only", "--ignore-submodules=dirty", "HEAD", "--", PREFIX)
+    working = git("diff", "--name-only", "--ignore-submodules=dirty", "--", PREFIX)
+    untracked = git("ls-files", "--others", "--exclude-standard", "--", PREFIX)
+    if changed or staged.strip() or working.strip() or untracked.strip():
+        print(
+            "Vendored vismatch differs from the last subtree sync. Make changes in the fork, "
+            "then import them with scripts/sync_vismatch.py --fork <path> --branch main.",
+            file=sys.stderr,
+        )
+        return 1
+    print("Vendored vismatch matches the last subtree sync.")
+    return 0
+
+
+def vendored_submodules() -> list[tuple[str, dict[str, str]]]:
+    """(path relative to visbench root, all settings) for every submodule declared by the vendored vismatch.
+
+    Every key is kept (url, ignore, branch, ...); only ``path`` is rewritten to include the prefix.
+    """
     parser = configparser.ConfigParser(interpolation=None)
     parser.read_string((ROOT / PREFIX / ".gitmodules").read_text(encoding="utf-8"))
-    return sorted((f"{PREFIX}/{parser[s]['path']}", parser[s]["url"]) for s in parser.sections())
+    entries = []
+    for section in parser.sections():
+        settings = {k: v.strip() for k, v in parser[section].items()}
+        settings["path"] = f"{PREFIX}/{settings['path']}"
+        entries.append((settings["path"], settings))
+    return sorted(entries)
 
 
 def regenerate_gitmodules() -> int:
@@ -46,7 +91,9 @@ def regenerate_gitmodules() -> int:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     text = re.sub(rf"\n?{re.escape(BEGIN)}.*?{re.escape(END)}\n?", "\n", text, flags=re.S).strip("\n")
     entries = vendored_submodules()
-    block = "\n".join(f'[submodule "{p}"]\n\tpath = {p}\n\turl = {u}' for p, u in entries)
+    block = "\n".join(
+        f'[submodule "{p}"]\n' + "\n".join(f"\t{k} = {v}" for k, v in settings.items()) for p, settings in entries
+    )
     new = (text + "\n\n" if text else "") + f"{BEGIN}\n{block}\n{END}\n"
     path.write_text(new, encoding="utf-8", newline="\n")
     tracked = {line.split("\t")[1] for line in git("ls-files", "-s", PREFIX).splitlines() if line.startswith("160000")}
@@ -72,12 +119,16 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--fork", help="path or URL of the vismatch fork to pull from")
     ap.add_argument("--branch", default="main", help="fork branch to pull (default: main)")
-    ap.add_argument("--gitmodules-only", action="store_true", help="only regenerate .gitmodules")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--gitmodules-only", action="store_true", help="only regenerate .gitmodules")
+    mode.add_argument("--check", action="store_true", help="check one-way fork -> vendor flow without changing files")
     args = ap.parse_args()
+    if args.check:
+        return check()
     if args.gitmodules_only:
         return regenerate_gitmodules()
     if not args.fork:
-        ap.error("--fork is required unless --gitmodules-only is given")
+        ap.error("--fork is required unless --gitmodules-only or --check is given")
     return pull(args.fork, args.branch)
 
 

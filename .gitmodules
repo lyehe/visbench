@@ -17,6 +17,7 @@
 [submodule "third_party/vismatch/vismatch/third_party/LISRD"]
 	path = third_party/vismatch/vismatch/third_party/LISRD
 	url = https://github.com/rpautrat/LISRD.git
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/LiftFeat"]
 	path = third_party/vismatch/vismatch/third_party/LiftFeat
 	url = https://github.com/lyp-deeplearning/LiftFeat.git
@@ -30,12 +31,14 @@ ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/MINIMA"]
 	path = third_party/vismatch/vismatch/third_party/MINIMA
 	url = https://github.com/LSXI7/MINIMA
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/MatchAnything"]
 	path = third_party/vismatch/vismatch/third_party/MatchAnything
 	url = https://huggingface.co/spaces/LittleFrog/MatchAnything
 [submodule "third_party/vismatch/vismatch/third_party/MatchFormer"]
 	path = third_party/vismatch/vismatch/third_party/MatchFormer
 	url = https://github.com/jamycheung/MatchFormer.git
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/REDI-Match"]
 	path = third_party/vismatch/vismatch/third_party/REDI-Match
 	url = https://github.com/YinjiGe/REDI-Match
@@ -60,6 +63,7 @@ ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/SphereGlue"]
 	path = third_party/vismatch/vismatch/third_party/SphereGlue
 	url = https://github.com/alexstoken/SphereGlue.git
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/Steerers"]
 	path = third_party/vismatch/vismatch/third_party/Steerers
 	url = https://github.com/georg-bn/rotation-steerers.git
@@ -75,9 +79,11 @@ ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/XoFTR"]
 	path = third_party/vismatch/vismatch/third_party/XoFTR
 	url = https://github.com/OnderT/XoFTR
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/ZippyPoint"]
 	path = third_party/vismatch/vismatch/third_party/ZippyPoint
 	url = https://github.com/menelaoskanakis/ZippyPoint
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/accelerated_features"]
 	path = third_party/vismatch/vismatch/third_party/accelerated_features
 	url = https://github.com/verlab/accelerated_features.git
@@ -93,6 +99,7 @@ ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/duster"]
 	path = third_party/vismatch/vismatch/third_party/duster
 	url = https://github.com/naver/dust3r
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/gim"]
 	path = third_party/vismatch/vismatch/third_party/gim
 	url = https://github.com/alexstoken/gim.git
@@ -105,6 +112,7 @@ ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/mast3r"]
 	path = third_party/vismatch/vismatch/third_party/mast3r
 	url = https://github.com/naver/mast3r.git
+	ignore = untracked
 [submodule "third_party/vismatch/vismatch/third_party/omniglue"]
 	path = third_party/vismatch/vismatch/third_party/omniglue
 	url = https://github.com/google-research/omniglue.git
