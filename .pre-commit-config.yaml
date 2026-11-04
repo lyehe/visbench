@@ -1,6 +1,6 @@
 # OpsiClear fork: install once with `pre-commit install`.
-# These hooks only check, or apply ruff with upstream's own config (which upstream already passes),
-# so they never rewrite upstream files and keep `git merge upstream/main` conflict-free.
+# The hygiene hooks only check. ruff fixes/formats the files you commit, using upstream's own config
+# (which upstream already passes), so unedited upstream files are never rewritten.
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
