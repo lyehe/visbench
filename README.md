@@ -20,26 +20,25 @@ Benchmark harness for visual feature matching:
 git clone https://github.com/lyehe/visbench
 cd visbench
 
-# Pull only the vismatch submodule (one level deep). vismatch itself has 25+
-# nested matcher submodules; check out only the ones you use (below).
-git submodule update --init third_party/vismatch
-
 uv venv
 uv pip install -e .
 uv pip install -e ./third_party/vismatch
 ```
 
+vismatch is vendored in `third_party/vismatch` (an OpsiClear fork; see
+[Vendored vismatch](#vendored-vismatch)), so no submodule step is needed for it.
+
 `uv` resolves torch from the CUDA 13.0 index pinned in `pyproject.toml`. For
 CPU-only or another CUDA version, edit `[[tool.uv.index]]`.
 
 > **Do not use `--recurse-submodules` or `git submodule update --init --recursive`.**
-> That clones every matcher repo nested inside vismatch (tens of GB).
+> That clones every matcher repo vendored vismatch depends on (tens of GB).
 
-Matcher code lives in vismatch's own submodules. Check out the ones you need,
-for example LoMa:
+Matcher code lives in vismatch's third-party submodules. Check out the ones you
+need, for example LoMa:
 
 ```bash
-git -C third_party/vismatch submodule update --init vismatch/third_party/LoMa
+git submodule update --init third_party/vismatch/vismatch/third_party/LoMa
 ```
 
 Optional:
@@ -128,3 +127,22 @@ The vendored `vismatch` submodule is BSD 3-Clause (Copyright 2024 Alex Stoken,
 Gabriele Berton). Each dataset has its own license; consult the source linked
 in `DATASETS.md` and in each dataset module's docstring before redistributing
 data.
+
+## Vendored vismatch
+
+`third_party/vismatch` is an OpsiClear fork of
+[gmberton/vismatch](https://github.com/gmberton/vismatch) (BSD-3-Clause, license kept in that
+directory), vendored as a squashed `git subtree`. Change it in two ways:
+
+- **Small fixes:** edit it here and commit with visbench as usual.
+- **Fork work and new upstream matchers:** these happen in the fork's own checkout, which merges
+  upstream with its `scripts/sync_upstream.py`. Then pull the fork into visbench:
+
+  ```bash
+  uv run python scripts/sync_vismatch.py --fork <path-or-url-of-fork> --branch main
+  ```
+
+  This runs `git subtree pull --squash` and regenerates the root `.gitmodules` entries for
+  vismatch's model submodules (git only reads the top-level `.gitmodules`).
+
+Never open pull requests or issues against the upstream gmberton/vismatch repository.

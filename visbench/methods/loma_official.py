@@ -12,7 +12,7 @@ the LoMa paper. The harness hands it file paths instead of resized images
 GPU only: the reference path runs in bfloat16 mixed precision, which fails on CPU.
 
 Needs vismatch's LoMa submodule:
-``git -C third_party/vismatch submodule update --init vismatch/third_party/LoMa``.
+``git submodule update --init third_party/vismatch/vismatch/third_party/LoMa``.
 """
 
 from __future__ import annotations
