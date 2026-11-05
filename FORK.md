@@ -92,6 +92,21 @@ those selectively if required. Do not use `--recursive` or initialise all model
 submodules. Initialising source code does not install optional dependencies or
 weights, and CLIDD's kernels require CUDA when constructing the model.
 
+## Patches to third-party submodules
+
+Model submodules are pinned to upstream commits, so OpsiClear edits to them are kept as patch files
+in `patches/` and applied to a checked-out submodule (re-apply after `git submodule update`):
+
+```bash
+git -C vismatch/third_party/RoMaV2 apply ../../../patches/RoMaV2-copy-head-input.patch
+git -C vismatch/third_party/LoMa apply ../../../patches/LoMa-return-all-scores.patch
+```
+
+- `RoMaV2-copy-head-input.patch` (bug fix): the matcher assigned into the caller's feature list,
+  corrupting cached features reused across pairs (exhaustive / cached matching); it now copies it.
+- `LoMa-return-all-scores.patch`: optional `return_all_scores=True` returns every layer's
+  assignment scores, for layer-wise supervision when training; the default output is unchanged.
+
 ## OpsiClear changes on top of upstream
 
 Keep these small and in upstream's style, so merges stay conflict-free:

@@ -65,6 +65,112 @@ class LoMaMatcher(BaseMatcher):
         img = img.unsqueeze(0).to(self.device)
         return img, orig_shape
 
+    # ------------------------------------------------------------------
+    # Cached sliding-window path (video pseudo-labeling).
+    # ------------------------------------------------------------------
+    _DD_CACHE_CAP = 6
+
+    def _detect_describe_cached(self, img, key):
+        cache = getattr(self, "_dd_cache", None)
+        if cache is None:
+            from collections import OrderedDict
+
+            cache = self._dd_cache = OrderedDict()
+        hit = cache.get(key)
+        if hit is not None:
+            return hit
+        img_p, orig_shape = self.preprocess(img)
+        H, W = img_p.shape[-2:]
+        kpts, desc, _, _ = self.matcher.detect_and_describe(img_p, self.max_num_keypoints)
+        hit = (kpts, desc, orig_shape, H, W)
+        cache[key] = hit
+        while len(cache) > self._DD_CACHE_CAP:
+            cache.popitem(last=False)
+        return hit
+
+    @torch.inference_mode()
+    def match_cached(self, img0, key0, img1, key1):
+        """Sliding-window matching: detect+describe results are cached per
+        frame `key`, so a video frame appearing in two consecutive pairs is
+        only detected/described once (the dominant cost for LoMa-G). Skips
+        BaseMatcher.forward()'s homography RANSAC — callers of this path run
+        their own robust fitting. Returns {'matched_kpts0','matched_kpts1'}
+        as tensors in original-image pixel coords (same convention as
+        _forward, including the COLMAP -0.5 offset)."""
+        kpts0, desc0, shape0, H0, W0 = self._detect_describe_cached(img0, key0)
+        kpts1, desc1, shape1, H1, W1 = self._detect_describe_cached(img1, key1)
+
+        scores = self.matcher(kpts0, kpts1, desc0, desc1)["scores"]
+        m0, _, _, _ = filter_matches(scores, self.matcher.cfg.filter_threshold)
+
+        valid = m0[0] > -1
+        matched_kpts0 = to_pixel_coords(kpts0[0][torch.where(valid)[0]], H0, W0)
+        matched_kpts1 = to_pixel_coords(kpts1[0][m0[0][valid]], H1, W1)
+
+        matched_kpts0 = self.rescale_coords(matched_kpts0, *shape0, H0, W0)
+        matched_kpts1 = self.rescale_coords(matched_kpts1, *shape1, H1, W1)
+
+        offset = 0.5  # COLMAP convention, same as _forward
+        return {
+            "matched_kpts0": matched_kpts0 - offset,
+            "matched_kpts1": matched_kpts1 - offset,
+        }
+
+    @torch.inference_mode()
+    def match_cached_conf(self, img0, key0, img1, key1):
+        """Like match_cached but also returns per-correspondence confidence
+        (mutual-NN match score from filter_matches' mscores0), for distilling
+        LoMa correspondences into a student with teacher-confidence weighting.
+        Returns {'matched_kpts0','matched_kpts1','confidence'} (conf in [0,1])."""
+        kpts0, desc0, shape0, H0, W0 = self._detect_describe_cached(img0, key0)
+        kpts1, desc1, shape1, H1, W1 = self._detect_describe_cached(img1, key1)
+
+        scores = self.matcher(kpts0, kpts1, desc0, desc1)["scores"]
+        m0, _, mscores0, _ = filter_matches(scores, self.matcher.cfg.filter_threshold)
+
+        valid = m0[0] > -1
+        matched_kpts0 = to_pixel_coords(kpts0[0][torch.where(valid)[0]], H0, W0)
+        matched_kpts1 = to_pixel_coords(kpts1[0][m0[0][valid]], H1, W1)
+
+        matched_kpts0 = self.rescale_coords(matched_kpts0, *shape0, H0, W0)
+        matched_kpts1 = self.rescale_coords(matched_kpts1, *shape1, H1, W1)
+
+        offset = 0.5  # COLMAP convention, same as _forward / match_cached
+        return {
+            "matched_kpts0": matched_kpts0 - offset,
+            "matched_kpts1": matched_kpts1 - offset,
+            "confidence": mscores0[0][valid],
+        }
+
+    @torch.inference_mode()
+    def match_cached_distill(self, img0, key0, img1, key1):
+        """match_cached_conf + the LoMa (DINOv2) descriptors at each matched
+        keypoint, for true distillation (descriptor + soft-assignment) into a
+        student. Returns matched_kpts0/1 (orig px), confidence, and desc0/desc1
+        ([N, 256] teacher descriptors aligned to the matches)."""
+        kpts0, desc0, shape0, H0, W0 = self._detect_describe_cached(img0, key0)
+        kpts1, desc1, shape1, H1, W1 = self._detect_describe_cached(img1, key1)
+
+        scores = self.matcher(kpts0, kpts1, desc0, desc1)["scores"]
+        m0, _, mscores0, _ = filter_matches(scores, self.matcher.cfg.filter_threshold)
+
+        valid = m0[0] > -1
+        idxA = torch.where(valid)[0]
+        idxB = m0[0][valid]
+        matched_kpts0 = to_pixel_coords(kpts0[0][idxA], H0, W0)
+        matched_kpts1 = to_pixel_coords(kpts1[0][idxB], H1, W1)
+        matched_kpts0 = self.rescale_coords(matched_kpts0, *shape0, H0, W0)
+        matched_kpts1 = self.rescale_coords(matched_kpts1, *shape1, H1, W1)
+
+        offset = 0.5
+        return {
+            "matched_kpts0": matched_kpts0 - offset,
+            "matched_kpts1": matched_kpts1 - offset,
+            "confidence": mscores0[0][valid],
+            "desc0": desc0[0][idxA],
+            "desc1": desc1[0][idxB],
+        }
+
     def _forward(self, img0, img1):
         img0, img0_orig_shape = self.preprocess(img0)
         img1, img1_orig_shape = self.preprocess(img1)
