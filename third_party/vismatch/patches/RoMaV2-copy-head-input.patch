@@ -1,0 +1,14 @@
+diff --git a/src/romav2/matcher.py b/src/romav2/matcher.py
+index 1c1ef6d..ba36d26 100644
+--- a/src/romav2/matcher.py
++++ b/src/romav2/matcher.py
+@@ -55,7 +55,8 @@ def _compute_head_preds(
+     img_B: torch.Tensor,
+     head: DPTHead,
+ ) -> torch.Tensor:
+-    head_input = f_list_A
++    # Copy: assigning into the caller's list corrupts cached feature lists reused across pairs.
++    head_input = list(f_list_A)
+     head_input[-1] = f_list_A[-1] + f_mv_A + match_emb_AB
+     warp_and_confidence = head(head_input, img_A=img_A, img_B=img_B)
+     B, H_out, W_out, D_warp_and_confidence = warp_and_confidence.shape

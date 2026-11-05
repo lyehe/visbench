@@ -33,11 +33,14 @@ class MatchAnythingMatcher(BaseMatcher):
         match_threshold=0.2,
         img_resize=None,
         *args,
+        low_memory=False,
         **kwargs,
     ):
         super().__init__(device, **kwargs)
 
         self.variant = variant.lower()
+        # roma variant only: skip upsampling and use a 448 coarse resolution (see the notes in _load_model)
+        self.low_memory = low_memory
         if self.variant not in ("eloftr", "roma"):
             raise ValueError(f"Unsupported MatchAnything variant: {variant}")
 
@@ -62,6 +65,17 @@ class MatchAnythingMatcher(BaseMatcher):
             if "cuda" not in self.device:
                 cfg.LOFTR.FP16 = False
                 cfg.ROMA.MODEL.AMP = False
+            if self.low_memory:
+                # Disable upsample_preds — the upsample step allocates a multi-GB
+                # warp tensor every call AND the upstream model retains it on the
+                # decoder, driving the "VRAM creep across pairs within one video"
+                # we observe in the GIM fleet. Costs ~0.5-1 AUC@5 vs upsampled.
+                cfg.ROMA.TEST_TIME.UPSAMPLE = False
+                # Lower coarse_res from 560 -> 448 (must be multiple of 14 & 8 for
+                # the DINOv2 backbone). Cuts warp tensor footprint ~36%, costs
+                # another ~0.3-0.5 AUC@5 — worth it given the consensus filter at
+                # eps=4px makes it invisible.
+                cfg.ROMA.TEST_TIME.COARSE_RES = (448, 448)
 
         cfg.METHOD = self.model_name
         cfg.LOFTR.MATCH_COARSE.THR = self.match_threshold

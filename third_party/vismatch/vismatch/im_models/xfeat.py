@@ -12,10 +12,14 @@ from modules.lighterglue import LighterGlue
 
 class xFeatMatcher(BaseMatcher):
     def __init__(self, device="cpu", max_num_keypoints=4096, mode="sparse", *args, **kwargs):
+        # Optional custom checkpoint (fine-tuned weights) — pop before super so it
+        # doesn't reach BaseMatcher. Accepts plain *.pth or *_training_state.pth
+        # (XFeat._state_dict_from_checkpoint handles both).
+        weights = kwargs.pop("weights", None)
         super().__init__(device, **kwargs)
         assert mode in ["sparse", "semi-dense", "lighterglue"]
 
-        self.model_path = f"{snapshot_download('vismatch/xfeat')}/xfeat.pt"
+        self.model_path = weights or f"{snapshot_download('vismatch/xfeat')}/xfeat.pt"
 
         self.model = XFeat(weights=self.model_path)
         self.model.net = self.model.net.to(device)

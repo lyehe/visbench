@@ -73,6 +73,17 @@ ignore = ["E402", "E501"]
 [tool.uv.extra-build-dependencies]
 torch-cluster = ["torch"]
 
+# Pin torch family to CUDA 13.0 wheels (driver 591.74 supports CUDA 13.x).
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.sources]
+torch       = { index = "pytorch-cu130" }
+torchvision = { index = "pytorch-cu130" }
+torchaudio  = { index = "pytorch-cu130" }
+
 [tool.setuptools]
 py-modules = ["vismatch_match", "vismatch_extract", "vismatch_test"]
 include-package-data = true

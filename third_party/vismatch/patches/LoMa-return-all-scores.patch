@@ -1,0 +1,38 @@
+diff --git a/src/loma/loma.py b/src/loma/loma.py
+index ed096c2..e5adc67 100644
+--- a/src/loma/loma.py
++++ b/src/loma/loma.py
+@@ -349,6 +349,7 @@ class LoMa(Model):
+         kpts1: torch.Tensor,
+         desc0: torch.Tensor,
+         desc1: torch.Tensor,
++        return_all_scores: bool = False,
+     ) -> dict:
+ 
+         with torch.autocast(
+@@ -363,15 +364,22 @@ class LoMa(Model):
+             encoding0 = self.posenc(kpts0)
+             encoding1 = self.posenc(kpts1)
+             scores = None
++            all_scores = []
+             for i in range(self.cfg.n_layers):
+                 desc0, desc1 = self.transformers[i](desc0, desc1, encoding0, encoding1)
+-            scores, _ = self.log_assignment[i](desc0, desc1)
++                if return_all_scores:
++                    scores, _ = self.log_assignment[i](desc0, desc1)
++                    all_scores.append(scores)
++            if not return_all_scores:
++                scores, _ = self.log_assignment[i](desc0, desc1)
+             assert scores is not None
+ 
+-        return {
++        out = {
+             "scores": scores,
+-            # "all_scores": all_scores, # for training you need to return intermediate scores for layer-wise supervision
+         }
++        if return_all_scores:
++            out["all_scores"] = all_scores
++        return out
+ 
+     @torch.inference_mode()
+     def detect_and_describe(

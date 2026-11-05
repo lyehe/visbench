@@ -111,6 +111,9 @@ available_models = [
     "xfeat-star-steerers-learned",
     "loma",
     "loma-r",
+    "loma-l",
+    "loma-g",
+    "loma-b128",
     "clidd-a48",
     "clidd-u128",
     "flexglue",
@@ -555,6 +558,18 @@ def get_matcher(
         from vismatch.im_models import loma
 
         return loma.LoMaMatcher(device, max_num_keypoints, arch="LoMa-R", *args, **kwargs)
+    elif matcher_name == "loma-l":
+        from vismatch.im_models import loma
+
+        return loma.LoMaMatcher(device, max_num_keypoints, arch="LoMa-L", *args, **kwargs)
+    elif matcher_name == "loma-g":
+        from vismatch.im_models import loma
+
+        return loma.LoMaMatcher(device, max_num_keypoints, arch="LoMa-G", *args, **kwargs)
+    elif matcher_name == "loma-b128":
+        from vismatch.im_models import loma
+
+        return loma.LoMaMatcher(device, max_num_keypoints, arch="LoMa-B128", *args, **kwargs)
 
     elif matcher_name == "clidd-a48":
         from vismatch.im_models import clidd
